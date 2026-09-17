@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ChillCode Normalized Mutation Report v1",
+  "type": "object",
+  "required": ["schemaVersion", "tool", "language", "project", "branch", "commit", "timestamp", "summary"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for forward compatibility"
+    },
+    "tool": {
+      "type": "string",
+      "enum": ["pitest", "stryker", "mutmut", "cosmic-ray", "cargo-mutants", "stryker4s", "stryker-net", "infection", "gremlins"],
+      "description": "Mutation testing tool used"
+    },
+    "language": {
+      "type": "string",
+      "description": "Programming language of mutated code"
+    },
+    "project": {
+      "type": "string",
+      "description": "SonarQube project key"
+    },
+    "branch": {
+      "type": "string",
+      "description": "Git branch name"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$",
+      "description": "Git commit SHA"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the mutation run"
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "killed", "survived", "noCoverage", "score"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "killed": { "type": "integer", "minimum": 0 },
+        "survived": { "type": "integer", "minimum": 0 },
+        "noCoverage": { "type": "integer", "minimum": 0 },
+        "timeout": { "type": "integer", "minimum": 0, "default": 0 },
+        "ignored": { "type": "integer", "minimum": 0, "default": 0 },
+        "score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "mutants"],
+        "properties": {
+          "path": { "type": "string" },
+          "language": { "type": "string" },
+          "mutants": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/mutant" }
+          },
+          "metrics": { "type": "object" }
+        }
+      }
+    },
+    "mutants": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/mutant" }
+    }
+  },
+  "definitions": {
+    "mutant": {
+      "type": "object",
+      "required": ["id", "mutatorName", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "mutatorName": { "type": "string" },
+        "replacement": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["KILLED", "SURVIVED", "NO_COVERAGE", "TIMEOUT", "IGNORED", "ERROR", "COMPILE_ERROR", "RUNTIME_ERROR"]
+        },
+        "statusReason": { "type": "string" },
+        "location": {
+          "type": "object",
+          "required": ["start"],
+          "properties": {
+            "start": { "$ref": "#/definitions/position" },
+            "end": { "$ref": "#/definitions/position" }
+          }
+        },
+        "coveredBy": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "static": { "type": "boolean", "default": false }
+      }
+    },
+    "position": {
+      "type": "object",
+      "required": ["line", "column"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

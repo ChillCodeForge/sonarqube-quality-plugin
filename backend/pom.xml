@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>ch.chillcode.sonar</groupId>
+    <artifactId>sonarqube-quality-plugin</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>sonar-plugin</packaging>
+
+    <name>ChillCode SonarQube Quality Plugin</name>
+    <description>Quality Dashboard, Mutation Testing UI, Storage API and Sensor for SonarQube Community</description>
+
+    <properties>
+        <sonar.version>26.8.0.126808</sonar.version>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <sonar-java-plugin-api.version>${sonar.version}</sonar-java-plugin-api.version>
+    </properties>
+
+    <dependencies>
+        <!-- SonarQube Plugin API -->
+        <dependency>
+            <groupId>org.sonarsource.sonarqube</groupId>
+            <artifactId>sonar-plugin-api</artifactId>
+            <version>${sonar.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- SonarQube API for metrics, sensors, web services -->
+        <dependency>
+            <groupId>org.sonarsource.sonarqube</groupId>
+            <artifactId>sonar-api</artifactId>
+            <version>${sonar.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JSON processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.17.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>2.17.1</version>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.12.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>UTF-8</encoding>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.sonarsource.sonarqube</groupId>
+                            <artifactId>sonar-plugin-api</artifactId>
+                            <version>${sonar.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonarsource.sonarqube</groupId>
+                <artifactId>sonar-packaging-maven-plugin</artifactId>
+                <version>2.1.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <pluginClass>ch.chillcode.sonar.quality.QualityPlugin</pluginClass>
+                    <pluginName>ChillCode Quality Plugin</pluginName>
+                    <pluginDescription>Quality Dashboard, Mutation Testing UI, Storage API and Sensor</pluginDescription>
+                    <pluginVersion>${project.version}</pluginVersion>
+                    <pluginKey>chillcode-quality</pluginKey>
+                    <pluginOrganizationName>ChillCode</pluginOrganizationName>
+                    <pluginOrganizationUrl>https://chillcode.de</pluginOrganizationUrl>
+                    <pluginIssueTrackerUrl>https://git.chillcode.de/ChillCode/sonarqube-quality-plugin/issues</pluginIssueTrackerUrl>
+                    <pluginSourcesUrl>https://git.chillcode.de/ChillCode/sonarqube-quality-plugin</pluginSourcesUrl>
+                    <pluginLicense>MIT</pluginLicense>
+                    <pluginHomepageUrl>https://git.chillcode.de/ChillCode/sonarqube-quality-plugin</pluginHomepageUrl>
+                    <sonarQubeMinVersion>${sonar.version}</sonarQubeMinVersion>
+                    <sonarQubeMaxVersion>99.9.9</sonarQubeMaxVersion>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <SonarQube-Plugin-Class>ch.chillcode.sonar.quality.QualityPlugin</SonarQube-Plugin-Class>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
