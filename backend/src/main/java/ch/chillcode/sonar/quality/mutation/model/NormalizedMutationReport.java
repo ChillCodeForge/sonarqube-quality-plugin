@@ -155,6 +155,9 @@ public class NormalizedMutationReport {
         @JsonProperty("location")
         private MutationLocation location;
 
+        @JsonProperty("filePath")
+        private String filePath;
+
         @JsonProperty("coveredBy")
         private List<String> coveredBy;
 
@@ -173,6 +176,8 @@ public class NormalizedMutationReport {
         public void setStatusReason(String statusReason) { this.statusReason = statusReason; }
         public MutationLocation getLocation() { return location; }
         public void setLocation(MutationLocation location) { this.location = location; }
+        public String getFilePath() { return filePath; }
+        public void setFilePath(String filePath) { this.filePath = filePath; }
         public List<String> getCoveredBy() { return coveredBy; }
         public void setCoveredBy(List<String> coveredBy) { this.coveredBy = coveredBy; }
         public boolean isStaticMutant() { return staticMutant; }

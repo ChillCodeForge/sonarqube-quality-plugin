@@ -1,0 +1,13 @@
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport$MutationFile.class
+ch/chillcode/sonar/quality/sensor/MutationSensor.class
+ch/chillcode/sonar/quality/mutation/storage/MutationReportStorageService.class
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport$MutationMutant.class
+ch/chillcode/sonar/quality/mutation/service/MutationService.class
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport$MutationLocation$Position.class
+ch/chillcode/sonar/quality/QualityPlugin.class
+ch/chillcode/sonar/quality/metrics/MutationMetrics.class
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport.class
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport$MutationLocation.class
+ch/chillcode/sonar/quality/mutation/model/NormalizedMutationReport$MutationSummary.class
+ch/chillcode/sonar/quality/mutation/parser/MutationReportParser.class
+ch/chillcode/sonar/quality/mutation/api/MutationWebService.class

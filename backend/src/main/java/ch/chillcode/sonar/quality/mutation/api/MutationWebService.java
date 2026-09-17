@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality.mutation.api;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
 import ch.chillcode.sonar.quality.mutation.service.MutationService;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import org.sonar.api.config.Configuration;
@@ -10,8 +11,7 @@ import org.sonar.api.server.ws.WebService;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
 
-import javax.annotation.Nullable;
-import java.io.File;
+import jakarta.annotation.Nullable;
 import java.io.IOException;
 
 public class MutationWebService {
@@ -30,87 +30,44 @@ public class MutationWebService {
 
     public void define(WebService.NewController controller) {
         WebService.NewController ws = controller
-                .setDescription("ChillCode Mutation Testing Report API")
-                .setName("api/chillcode_mutation")
-                .setSince("1.0");
+                .setDescription("ChillCode Mutation Testing Report API");
 
         // Upload report
-        ws.createAction("upload")
+        WebService.NewAction upload = ws.createAction("upload")
                 .setDescription("Upload a normalized mutation testing report")
-                .setSince("1.0")
-                .setHandler(this::uploadReport)
-                .createParam("projectKey")
-                .setDescription("SonarQube project key")
-                .setRequired(true)
-                .done()
-                .createParam("branch")
-                .setDescription("Branch name")
-                .setRequired(true)
-                .done()
-                .createParam("commit")
-                .setDescription("Commit SHA")
-                .setRequired(true)
-                .done()
-                .createParam("report")
-                .setDescription("Normalized mutation report JSON (multipart or raw body)")
-                .setRequired(true)
-                .done();
+                .setHandler(this::uploadReport);
+        upload.createParam("projectKey").setDescription("SonarQube project key").setRequired(true);
+        upload.createParam("branch").setDescription("Branch name").setRequired(true);
+        upload.createParam("commit").setDescription("Commit SHA").setRequired(true);
+        upload.createParam("report").setDescription("Normalized mutation report JSON (multipart or raw body)").setRequired(true);
 
         // Download report
-        ws.createAction("download")
+        WebService.NewAction download = ws.createAction("download")
                 .setDescription("Download the current mutation report for a project/branch")
-                .setSince("1.0")
-                .setHandler(this::downloadReport)
-                .createParam("projectKey")
-                .setDescription("SonarQube project key")
-                .setRequired(true)
-                .done()
-                .createParam("branch")
-                .setDescription("Branch name")
-                .setRequired(true)
-                .done();
+                .setHandler(this::downloadReport);
+        download.createParam("projectKey").setDescription("SonarQube project key").setRequired(true);
+        download.createParam("branch").setDescription("Branch name").setRequired(true);
 
         // Summary
-        ws.createAction("summary")
+        WebService.NewAction summary = ws.createAction("summary")
                 .setDescription("Get mutation summary for a project/branch")
-                .setSince("1.0")
-                .setHandler(this::getSummary)
-                .createParam("projectKey")
-                .setDescription("SonarQube project key")
-                .setRequired(true)
-                .done()
-                .createParam("branch")
-                .setDescription("Branch name")
-                .setRequired(true)
-                .done();
+                .setHandler(this::getSummary);
+        summary.createParam("projectKey").setDescription("SonarQube project key").setRequired(true);
+        summary.createParam("branch").setDescription("Branch name").setRequired(true);
 
         // Status
-        ws.createAction("status")
+        WebService.NewAction status = ws.createAction("status")
                 .setDescription("Get mutation testing status for a project")
-                .setSince("1.0")
-                .setHandler(this::getStatus)
-                .createParam("projectKey")
-                .setDescription("SonarQube project key")
-                .setRequired(true)
-                .done()
-                .createParam("branch")
-                .setDescription("Branch name (optional, defaults to main)")
-                .setRequired(false)
-                .done();
+                .setHandler(this::getStatus);
+        status.createParam("projectKey").setDescription("SonarQube project key").setRequired(true);
+        status.createParam("branch").setDescription("Branch name (optional, defaults to main)").setRequired(false);
 
         // Delete
-        ws.createAction("delete")
+        WebService.NewAction delete = ws.createAction("delete")
                 .setDescription("Delete mutation report for a project/branch")
-                .setSince("1.0")
-                .setHandler(this::deleteReport)
-                .createParam("projectKey")
-                .setDescription("SonarQube project key")
-                .setRequired(true)
-                .done()
-                .createParam("branch")
-                .setDescription("Branch name")
-                .setRequired(true)
-                .done();
+                .setHandler(this::deleteReport);
+        delete.createParam("projectKey").setDescription("SonarQube project key").setRequired(true);
+        delete.createParam("branch").setDescription("Branch name").setRequired(true);
     }
 
     private void checkAuth(Request request) {
@@ -120,8 +77,7 @@ public class MutationWebService {
                 throw new SecurityException("Invalid authentication token");
             }
         }
-        // Also check Authorization header
-        String authHeader = request.getHeader("Authorization");
+        String authHeader = request.param("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             if (authToken != null && !authToken.equals(token)) {
@@ -139,7 +95,7 @@ public class MutationWebService {
         String reportJson = request.param("report");
 
         if (projectKey == null || branch == null || commit == null || reportJson == null) {
-            response.status(400).write("Missing required parameters").done();
+            writeError(response, 400, "Missing required parameters");
             return;
         }
 
@@ -151,14 +107,14 @@ public class MutationWebService {
 
             storageService.storeReport(report);
 
-            response.stream(MediaType.JSON).write("{\"status\":\"ok\",\"message\":\"Report uploaded and stored\"}").done();
+            writeSuccess(response, "{\"status\":\"ok\",\"message\":\"Report uploaded and stored\"}");
 
         } catch (IOException e) {
             LOG.error("Failed to parse uploaded report", e);
-            response.status(400).write("Invalid report format: " + e.getMessage()).done();
+            writeError(response, 400, "Invalid report format: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to store report", e);
-            response.status(500).write("Internal error: " + e.getMessage()).done();
+            writeError(response, 500, "Internal error: " + e.getMessage());
         }
     }
 
@@ -167,22 +123,25 @@ public class MutationWebService {
         String branch = request.param("branch");
 
         if (projectKey == null || branch == null) {
-            response.status(400).write("Missing required parameters").done();
+            writeError(response, 400, "Missing required parameters");
             return;
         }
 
         try {
             NormalizedMutationReport report = storageService.loadReport(projectKey, branch);
             if (report == null) {
-                response.status(404).write("Report not found").done();
+                writeError(response, 404, "Report not found");
                 return;
             }
 
-            response.stream(MediaType.JSON).write(report).done();
+            writeJson(response, report.toString());
 
+        } catch (IOException e) {
+            LOG.error("Failed to load report", e);
+            writeError(response, 500, "Internal error: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to load report", e);
-            response.status(500).write("Internal error: " + e.getMessage()).done();
+            writeError(response, 500, "Internal error: " + e.getMessage());
         }
     }
 
@@ -191,14 +150,14 @@ public class MutationWebService {
         String branch = request.param("branch");
 
         if (projectKey == null || branch == null) {
-            response.status(400).write("Missing required parameters").done();
+            writeError(response, 400, "Missing required parameters");
             return;
         }
 
         try {
             NormalizedMutationReport report = storageService.loadReport(projectKey, branch);
             if (report == null) {
-                response.status(404).write("Report not found").done();
+                writeError(response, 404, "Report not found");
                 return;
             }
 
@@ -216,11 +175,14 @@ public class MutationWebService {
                     report.getLanguage()
             );
 
-            response.stream(MediaType.JSON).write(json).done();
+            writeJson(response, json);
 
+        } catch (IOException e) {
+            LOG.error("Failed to get summary", e);
+            writeError(response, 500, "Internal error: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to get summary", e);
-            response.status(500).write("Internal error: " + e.getMessage()).done();
+            writeError(response, 500, "Internal error: " + e.getMessage());
         }
     }
 
@@ -230,7 +192,7 @@ public class MutationWebService {
         if (branch == null) branch = "main";
 
         if (projectKey == null) {
-            response.status(400).write("Missing projectKey").done();
+            writeError(response, 400, "Missing projectKey");
             return;
         }
 
@@ -246,10 +208,13 @@ public class MutationWebService {
                         s.getScore(), s.getTotal(), s.getSurvived(), report.getTool(), report.getTimestamp()
                 );
             }
-            response.stream(MediaType.JSON).write(json).done();
+            writeJson(response, json);
+        } catch (IOException e) {
+            LOG.error("Failed to get status", e);
+            writeError(response, 500, "Internal error: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to get status", e);
-            response.status(500).write("Internal error: " + e.getMessage()).done();
+            writeError(response, 500, "Internal error: " + e.getMessage());
         }
     }
 
@@ -260,16 +225,43 @@ public class MutationWebService {
         String branch = request.param("branch");
 
         if (projectKey == null || branch == null) {
-            response.status(400).write("Missing required parameters").done();
+            writeError(response, 400, "Missing required parameters");
             return;
         }
 
         try {
             storageService.deleteReport(projectKey, branch);
-            response.stream(MediaType.JSON).write("{\"status\":\"ok\",\"message\":\"Report deleted\"}").done();
+            writeSuccess(response, "{\"status\":\"ok\",\"message\":\"Report deleted\"}");
+        } catch (IOException e) {
+            LOG.error("Failed to delete report", e);
+            writeError(response, 500, "Internal error: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("Failed to delete report", e);
-            response.status(500).write("Internal error: " + e.getMessage()).done();
+            writeError(response, 500, "Internal error: " + e.getMessage());
+        }
+    }
+
+    private void writeSuccess(Response response, String json) {
+        try {
+            response.stream().setMediaType("application/json").setStatus(200).output().write(json.getBytes());
+        } catch (IOException e) {
+            LOG.error("Failed to write success response", e);
+        }
+    }
+
+    private void writeError(Response response, int status, String message) {
+        try {
+            response.stream().setStatus(status).output().write(message.getBytes());
+        } catch (IOException e) {
+            LOG.error("Failed to write error response", e);
+        }
+    }
+
+    private void writeJson(Response response, String json) {
+        try {
+            response.stream().setMediaType("application/json").output().write(json.getBytes());
+        } catch (IOException e) {
+            LOG.error("Failed to write JSON response", e);
         }
     }
 }

@@ -14,27 +14,47 @@
 
     <properties>
         <sonar.version>26.8.0.126808</sonar.version>
+        <sonar.plugin.api.version>13.5.0.4319</sonar.plugin.api.version>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <sonar-java-plugin-api.version>${sonar.version}</sonar-java-plugin-api.version>
     </properties>
 
-    <dependencies>
-        <!-- SonarQube Plugin API -->
-        <dependency>
-            <groupId>org.sonarsource.sonarqube</groupId>
-            <artifactId>sonar-plugin-api</artifactId>
-            <version>${sonar.version}</version>
-            <scope>provided</scope>
-        </dependency>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>sonarsource</id>
+            <name>SonarSource Plugins</name>
+            <url>https://binaries.sonarsource.com/maven</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
-        <!-- SonarQube API for metrics, sensors, web services -->
+    <repositories>
+        <repository>
+            <id>sonarsource</id>
+            <name>SonarSource Releases</name>
+            <url>https://binaries.sonarsource.com/maven</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- SonarQube Plugin API (new coordinates since v9.5) -->
         <dependency>
-            <groupId>org.sonarsource.sonarqube</groupId>
-            <artifactId>sonar-api</artifactId>
-            <version>${sonar.version}</version>
+            <groupId>org.sonarsource.api.plugin</groupId>
+            <artifactId>sonar-plugin-api</artifactId>
+            <version>${sonar.plugin.api.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -53,6 +73,14 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>2.17.1</version>
+        </dependency>
+
+        <!-- javax.annotation for @Nullable -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Testing -->
@@ -82,18 +110,18 @@
                     <encoding>UTF-8</encoding>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>org.sonarsource.sonarqube</groupId>
+                            <groupId>org.sonarsource.api.plugin</groupId>
                             <artifactId>sonar-plugin-api</artifactId>
-                            <version>${sonar.version}</version>
+                            <version>${sonar.plugin.api.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
 
             <plugin>
-                <groupId>org.sonarsource.sonarqube</groupId>
+                <groupId>org.sonarsource.sonar-packaging-maven-plugin</groupId>
                 <artifactId>sonar-packaging-maven-plugin</artifactId>
-                <version>2.1.0</version>
+                <version>1.25.1.3002</version>
                 <extensions>true</extensions>
                 <configuration>
                     <pluginClass>ch.chillcode.sonar.quality.QualityPlugin</pluginClass>
@@ -107,7 +135,7 @@
                     <pluginSourcesUrl>https://git.chillcode.de/ChillCode/sonarqube-quality-plugin</pluginSourcesUrl>
                     <pluginLicense>MIT</pluginLicense>
                     <pluginHomepageUrl>https://git.chillcode.de/ChillCode/sonarqube-quality-plugin</pluginHomepageUrl>
-                    <sonarQubeMinVersion>${sonar.version}</sonarQubeMinVersion>
+                    <pluginApiMinVersion>${sonar.plugin.api.version}</pluginApiMinVersion>
                     <sonarQubeMaxVersion>99.9.9</sonarQubeMaxVersion>
                 </configuration>
             </plugin>

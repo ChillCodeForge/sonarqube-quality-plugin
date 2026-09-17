@@ -5,7 +5,6 @@ import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import org.sonar.api.batch.fs.InputFile;
-import org.sonar.api.batch.fs.internal.DefaultInputFile;
 import org.sonar.api.batch.sensor.SensorContext;
 import org.sonar.api.issue.Issue;
 import org.sonar.api.measures.Metric;
@@ -54,50 +53,37 @@ public class MutationService {
         NormalizedMutationReport.MutationSummary summary = report.getSummary();
 
         // Core metrics
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_SCORE)
-                .withValue(summary.getScore())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_TOTAL)
-                .withValue(summary.getTotal())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_KILLED)
-                .withValue(summary.getKilled())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_SURVIVED)
-                .withValue(summary.getSurvived())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_NO_COVERAGE)
-                .withValue(summary.getNoCoverage())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_TIMEOUT)
-                .withValue(summary.getTimeout())
-                .save();
-
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_IGNORED)
-                .withValue(summary.getIgnored())
-                .save();
+        saveMeasure(context, MutationMetrics.MUTATION_SCORE, summary.getScore());
+        saveMeasure(context, MutationMetrics.MUTATION_TOTAL, summary.getTotal());
+        saveMeasure(context, MutationMetrics.MUTATION_KILLED, summary.getKilled());
+        saveMeasure(context, MutationMetrics.MUTATION_SURVIVED, summary.getSurvived());
+        saveMeasure(context, MutationMetrics.MUTATION_NO_COVERAGE, summary.getNoCoverage());
+        saveMeasure(context, MutationMetrics.MUTATION_TIMEOUT, summary.getTimeout());
+        saveMeasure(context, MutationMetrics.MUTATION_IGNORED, summary.getIgnored());
 
         // Tool and language
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_TOOL)
-                .withValue(report.getTool())
-                .save();
+        saveMeasure(context, MutationMetrics.MUTATION_TOOL, report.getTool());
+        saveMeasure(context, MutationMetrics.MUTATION_LANGUAGE, report.getLanguage());
+    }
 
-        context.<Metric>newMeasure()
-                .withMetric(MutationMetrics.MUTATION_LANGUAGE)
-                .withValue(report.getLanguage())
+    private void saveMeasure(SensorContext context, Metric metric, double value) {
+        context.newMeasure()
+                .forMetric(metric)
+                .withValue(value)
+                .save();
+    }
+
+    private void saveMeasure(SensorContext context, Metric metric, int value) {
+        context.newMeasure()
+                .forMetric(metric)
+                .withValue(value)
+                .save();
+    }
+
+    private void saveMeasure(SensorContext context, Metric metric, String value) {
+        context.newMeasure()
+                .forMetric(metric)
+                .withValue(value)
                 .save();
     }
 
@@ -117,7 +103,6 @@ public class MutationService {
                 continue;
             }
 
-            String filePath = mutant.getLocation().getFilePath(); // We'll need to add this to the model
             // For now, skip file-level issues if we can't locate the file
             // In a full implementation, we'd map the mutant to the correct InputFile
         }

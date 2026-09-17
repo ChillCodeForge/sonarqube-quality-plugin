@@ -14,12 +14,5 @@ public class QualityPlugin implements Plugin {
 
         // Web Services for Report Storage API
         context.addExtension(ch.chillcode.sonar.quality.mutation.api.MutationWebService.class);
-
-        // Custom Web Pages (React)
-        context.addExtension(ch.chillcode.sonar.quality.ui.QualityDashboardPage.class);
-        context.addExtension(ch.chillcode.sonar.quality.ui.MutationTestingPage.class);
-
-        // Configuration
-        context.addExtension(ch.chillcode.sonar.quality.config.QualityConfiguration.class);
     }
 }

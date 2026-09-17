@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class MutationReportStorageService {
@@ -29,7 +30,7 @@ public class MutationReportStorageService {
         this.storageRoot = Path.of(root);
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
-        this.maxReportSize = config.getLong("chillcode.mutation.maxReportSize").orElse(50 * 1024 * 1024); // 50MB
+        this.maxReportSize = config.getLong("chillcode.mutation.maxReportSize").orElse(50L * 1024 * 1024); // 50MB
         this.prRetentionDays = config.getInt("chillcode.mutation.retention.prDays").orElse(14);
 
         // Ensure storage directory exists
