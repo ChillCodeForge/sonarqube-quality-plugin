@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +75,12 @@ public class NormalizedMutationReport {
 
     public List<MutationMutant> getMutants() { return mutants; }
     public void setMutants(List<MutationMutant> mutants) { this.mutants = mutants; }
+
+    public String toJson() throws IOException {
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .writeValueAsString(this);
+    }
 
     public static class MutationSummary {
         @JsonProperty("total")

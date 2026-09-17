@@ -2,11 +2,11 @@ import axios from 'axios'
 
 const API_BASE = '/api'
 
-export async function fetchQualityMetrics(): Promise<any[]> {
+export async function fetchQualityMetrics(componentKey: string): Promise<any[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/component`, {
       params: {
-        component: window.location.pathname.split('/')[2], // project key from URL
+        component: componentKey,
         metricKeys: [
           'reliability_rating',
           'security_rating',
@@ -29,11 +29,11 @@ export async function fetchQualityMetrics(): Promise<any[]> {
   }
 }
 
-export async function fetchQualityHistory(): Promise<any[]> {
+export async function fetchQualityHistory(componentKey: string): Promise<any[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/search_history`, {
       params: {
-        component: window.location.pathname.split('/')[2],
+        component: componentKey,
         metrics: 'coverage,mutation_score',
         from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       }
@@ -45,30 +45,29 @@ export async function fetchQualityHistory(): Promise<any[]> {
   }
 }
 
-export async function fetchMutationReport(): Promise<any> {
+export async function fetchMutationSummary(projectKey: string, branch: string = 'main'): Promise<any> {
   try {
-    const projectKey = window.location.pathname.split('/')[2]
-    const branch = window.location.pathname.split('/')[4] || 'main'
-    const response = await axios.get(`${API_BASE}/chillcode_mutation/report`, {
+    const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
+      params: { projectKey, branch }
+    })
+    if (response.data?.hasReport === false) {
+      return null
+    }
+    return response.data
+  } catch (error) {
+    console.error('Failed to fetch mutation summary:', error)
+    return null
+  }
+}
+
+export async function fetchMutationReport(projectKey: string, branch: string = 'main'): Promise<any> {
+  try {
+    const response = await axios.get(`${API_BASE}/chillcode_mutation/download`, {
       params: { projectKey, branch }
     })
     return response.data
   } catch (error) {
     console.error('Failed to fetch mutation report:', error)
-    return null
-  }
-}
-
-export async function fetchMutationSummary(): Promise<any> {
-  try {
-    const projectKey = window.location.pathname.split('/')[2]
-    const branch = window.location.pathname.split('/')[4] || 'main'
-    const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
-      params: { projectKey, branch }
-    })
-    return response.data
-  } catch (error) {
-    console.error('Failed to fetch mutation summary:', error)
     return null
   }
 }

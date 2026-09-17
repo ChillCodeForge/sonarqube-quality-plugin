@@ -12,20 +12,24 @@ interface QualityMetric {
   trend?: 'up' | 'down' | 'stable'
 }
 
-const QualityDashboard: React.FC = () => {
+interface QualityDashboardProps {
+  componentKey: string
+}
+
+const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => {
   const [metrics, setMetrics] = useState<QualityMetric[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [componentKey])
 
   const loadData = async () => {
     try {
       const [metricsData, historyData] = await Promise.all([
-        fetchQualityMetrics(),
-        fetchQualityHistory()
+        fetchQualityMetrics(componentKey),
+        fetchQualityHistory(componentKey)
       ])
       setMetrics(metricsData)
       setHistory(historyData)

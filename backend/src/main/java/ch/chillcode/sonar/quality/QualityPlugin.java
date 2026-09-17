@@ -1,5 +1,12 @@
 package ch.chillcode.sonar.quality;
 
+import ch.chillcode.sonar.quality.metrics.MutationMetrics;
+import ch.chillcode.sonar.quality.mutation.api.MutationWebService;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
+import ch.chillcode.sonar.quality.sensor.MutationSensor;
+import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
+import ch.chillcode.sonar.quality.ui.MutationTestingPage;
+import ch.chillcode.sonar.quality.ui.QualityDashboardPage;
 import org.sonar.api.Plugin;
 
 public class QualityPlugin implements Plugin {
@@ -7,12 +14,20 @@ public class QualityPlugin implements Plugin {
     @Override
     public void define(Context context) {
         // Custom Metrics
-        context.addExtension(ch.chillcode.sonar.quality.metrics.MutationMetrics.class);
+        context.addExtension(new MutationMetrics());
 
-        // Sensor for Mutation Testing Reports
-        context.addExtension(ch.chillcode.sonar.quality.sensor.MutationSensor.class);
+        // Services
+        context.addExtension(new MutationReportParser());
+        context.addExtension(new MutationReportStorageService());
 
-        // Web Services for Report Storage API
-        context.addExtension(ch.chillcode.sonar.quality.mutation.api.MutationWebService.class);
+        // WebService
+        context.addExtension(new MutationWebService());
+
+        // Sensor - will be instantiated with Configuration by SonarQube DI
+        context.addExtension(MutationSensor.class);
+
+        // UI Pages
+        context.addExtension(new QualityDashboardPage());
+        context.addExtension(new MutationTestingPage());
     }
 }

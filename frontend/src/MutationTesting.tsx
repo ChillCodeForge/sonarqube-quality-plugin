@@ -24,7 +24,12 @@ interface MutationFile {
   metrics: any
 }
 
-const MutationTesting: React.FC = () => {
+interface MutationTestingProps {
+  projectKey: string
+  branch?: string
+}
+
+const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 'main' }) => {
   const [summary, setSummary] = useState<MutationSummary | null>(null)
   const [files, setFiles] = useState<MutationFile[]>([])
   const [selectedFile, setSelectedFile] = useState<MutationFile | null>(null)
@@ -32,13 +37,13 @@ const MutationTesting: React.FC = () => {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [projectKey, branch])
 
   const loadData = async () => {
     try {
       const [summaryData, reportData] = await Promise.all([
-        fetchMutationSummary(),
-        fetchMutationReport()
+        fetchMutationSummary(projectKey, branch),
+        fetchMutationReport(projectKey, branch)
       ])
       setSummary(summaryData)
       if (reportData?.files) {
@@ -55,7 +60,7 @@ const MutationTesting: React.FC = () => {
     return <div className="loading">Loading mutation testing results...</div>
   }
 
-  if (!summary) {
+  if (!summary || summary.score === undefined || summary.score === null) {
     return <div className="empty">No mutation testing data available for this project</div>
   }
 

@@ -6,3 +6,5 @@
 /home/royal/Projects/sonarqube-quality-plugin/backend/src/main/java/ch/chillcode/sonar/quality/mutation/service/MutationService.java
 /home/royal/Projects/sonarqube-quality-plugin/backend/src/main/java/ch/chillcode/sonar/quality/mutation/storage/MutationReportStorageService.java
 /home/royal/Projects/sonarqube-quality-plugin/backend/src/main/java/ch/chillcode/sonar/quality/sensor/MutationSensor.java
+/home/royal/Projects/sonarqube-quality-plugin/backend/src/main/java/ch/chillcode/sonar/quality/ui/MutationTestingPage.java
+/home/royal/Projects/sonarqube-quality-plugin/backend/src/main/java/ch/chillcode/sonar/quality/ui/QualityDashboardPage.java

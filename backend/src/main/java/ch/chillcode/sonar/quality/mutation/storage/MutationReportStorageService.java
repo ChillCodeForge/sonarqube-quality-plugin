@@ -9,6 +9,7 @@ import org.sonar.api.utils.log.Loggers;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -20,28 +21,43 @@ import java.util.zip.GZIPOutputStream;
 public class MutationReportStorageService {
 
     private static final Logger LOG = Loggers.get(MutationReportStorageService.class);
-    private final Path storageRoot;
+    private Path storageRoot;
     private final ObjectMapper mapper;
-    private final long maxReportSize;
-    private final int prRetentionDays;
+    private long maxReportSize;
+    private int prRetentionDays;
+    private Configuration config;
 
-    public MutationReportStorageService(Configuration config) {
-        String root = config.get("chillcode.mutation.storage").orElse("/opt/sonarqube/mutation-reports");
-        this.storageRoot = Path.of(root);
+    public MutationReportStorageService() {
+        this.storageRoot = Path.of("/opt/sonarqube/mutation-reports");
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
-        this.maxReportSize = config.getLong("chillcode.mutation.maxReportSize").orElse(50L * 1024 * 1024); // 50MB
-        this.prRetentionDays = config.getInt("chillcode.mutation.retention.prDays").orElse(14);
+        this.maxReportSize = 50L * 1024 * 1024; // 50MB
+        this.prRetentionDays = 14;
+    }
 
-        // Ensure storage directory exists
+    private void ensureStorageDirectory() {
         try {
             Files.createDirectories(storageRoot);
+        } catch (AccessDeniedException e) {
+            LOG.warn("Cannot create storage directory (permission denied): {}. Directory must be created by container setup.", storageRoot);
         } catch (IOException e) {
             LOG.error("Failed to create storage directory: " + storageRoot, e);
         }
     }
 
+    public void setConfiguration(Configuration config) {
+        this.config = config;
+        if (config != null) {
+            String root = config.get("chillcode.mutation.storage").orElse("/opt/sonarqube/mutation-reports");
+            this.storageRoot = Path.of(root);
+            this.maxReportSize = config.getLong("chillcode.mutation.maxReportSize").orElse(50L * 1024 * 1024);
+            this.prRetentionDays = config.getInt("chillcode.mutation.retention.prDays").orElse(14);
+            ensureStorageDirectory();
+        }
+    }
+
     public Path storeReport(NormalizedMutationReport report) throws IOException {
+        ensureStorageDirectory();
         String projectKey = sanitize(report.getProject());
         String branch = sanitize(report.getBranch());
         Path projectDir = storageRoot.resolve(projectKey).resolve(branch);
@@ -67,6 +83,7 @@ public class MutationReportStorageService {
     }
 
     public NormalizedMutationReport loadReport(String projectKey, String branch) throws IOException {
+        ensureStorageDirectory();
         Path reportFile = storageRoot.resolve(sanitize(projectKey))
                 .resolve(sanitize(branch))
                 .resolve("current.json.gz");
@@ -81,6 +98,7 @@ public class MutationReportStorageService {
     }
 
     public void deleteReport(String projectKey, String branch) throws IOException {
+        ensureStorageDirectory();
         Path projectDir = storageRoot.resolve(sanitize(projectKey)).resolve(sanitize(branch));
         Path reportFile = projectDir.resolve("current.json.gz");
         Files.deleteIfExists(reportFile);

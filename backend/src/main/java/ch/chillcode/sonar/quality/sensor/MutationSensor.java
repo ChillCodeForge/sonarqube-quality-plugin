@@ -21,11 +21,20 @@ public class MutationSensor implements Sensor {
 
     private static final Logger LOG = Loggers.get(MutationSensor.class);
 
-    private final Configuration config;
-    private final MutationService mutationService;
+    private Configuration config;
+    private MutationReportStorageService storageService;
+    private MutationService mutationService;
 
-    public MutationSensor(Configuration config, MutationReportStorageService storageService) {
+    public MutationSensor() {
+        // No-arg constructor for SonarQube DI
+    }
+
+    public void setConfiguration(Configuration config) {
         this.config = config;
+    }
+
+    public void setMutationReportStorageService(MutationReportStorageService storageService) {
+        this.storageService = storageService;
         this.mutationService = new MutationService(storageService);
     }
 

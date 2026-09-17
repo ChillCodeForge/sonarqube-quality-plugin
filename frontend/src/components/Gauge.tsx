@@ -1,6 +1,4 @@
 import React from 'react'
-import { Arc, Text } from 'react-native-svg'
-// Since we can't use react-native-svg in web, we'll use a simple SVG implementation
 
 interface GaugeProps {
   value: number // 0-100
