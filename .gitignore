@@ -1,0 +1,17 @@
+# Node
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+
+# Maven / Java build output
+target/
+backend/target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
