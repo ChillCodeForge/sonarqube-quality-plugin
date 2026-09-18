@@ -32,12 +32,15 @@ echo "  Branch: $BRANCH"
 echo "  Commit: $COMMIT"
 echo "  Report: $REPORT_FILE"
 
-# Upload via Storage API
+# Upload via Storage API - the "report" param must be a named multipart
+# form field (SonarQube's request.paramAsInputStream("report") reads a
+# multipart part by name, not the raw request body); sending the gzip as
+# --data-binary silently leaves the "report" param unset and crashes the
+# server with a NullPointerException.
 UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X POST \
   -H "Authorization: Bearer $SONAR_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data-binary @"$REPORT_FILE" \
+  -F "report=@${REPORT_FILE};type=application/gzip" \
   "$SONAR_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=$BRANCH&commit=$COMMIT")
 
 HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -n1)

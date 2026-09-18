@@ -127,6 +127,12 @@ public class MutationReportParser {
                 List<NormalizedMutationReport.MutationMutant> fileMutants = new ArrayList<>();
                 
                 JsonNode mutantsNode = fileData.path("mutants");
+                int[] fileTotal = {0};
+                int[] fileKilled = {0};
+                int[] fileSurvived = {0};
+                int[] fileNoCoverage = {0};
+                int[] fileTimeout = {0};
+                int[] fileIgnored = {0};
                 if (mutantsNode.isArray()) {
                     for (JsonNode mutantNode : mutantsNode) {
                         NormalizedMutationReport.MutationMutant mutant = parseStrykerMutant(mutantNode, filePath);
@@ -134,17 +140,32 @@ public class MutationReportParser {
                         allMutants.add(mutant);
                         
                         total[0]++;
+                        fileTotal[0]++;
                         switch (mutant.getStatus()) {
-                            case "KILLED" -> killed[0]++;
-                            case "SURVIVED" -> survived[0]++;
-                            case "NO_COVERAGE" -> noCoverage[0]++;
-                            case "TIMEOUT" -> timeout[0]++;
-                            case "IGNORED" -> ignored[0]++;
+                            case "KILLED" -> { killed[0]++; fileKilled[0]++; }
+                            case "SURVIVED" -> { survived[0]++; fileSurvived[0]++; }
+                            case "NO_COVERAGE" -> { noCoverage[0]++; fileNoCoverage[0]++; }
+                            case "TIMEOUT" -> { timeout[0]++; fileTimeout[0]++; }
+                            case "IGNORED" -> { ignored[0]++; fileIgnored[0]++; }
                         }
                     }
                 }
                 
                 mFile.setMutants(fileMutants);
+                // Per-file breakdown so the UI's file table can show a
+                // per-file score/killed/survived instead of "N/A" - the
+                // frontend reads file.metrics.{score,killed,survived,
+                // noCoverage}, this was previously never populated.
+                int fileValid = fileKilled[0] + fileSurvived[0] + fileNoCoverage[0] + fileTimeout[0];
+                java.util.Map<String, Object> fileMetrics = new java.util.HashMap<>();
+                fileMetrics.put("score", fileValid > 0 ? (double) fileKilled[0] / fileValid * 100 : 0.0);
+                fileMetrics.put("total", fileTotal[0]);
+                fileMetrics.put("killed", fileKilled[0]);
+                fileMetrics.put("survived", fileSurvived[0]);
+                fileMetrics.put("noCoverage", fileNoCoverage[0]);
+                fileMetrics.put("timeout", fileTimeout[0]);
+                fileMetrics.put("ignored", fileIgnored[0]);
+                mFile.setMetrics(fileMetrics);
                 files.add(mFile);
             });
         }
@@ -199,10 +220,10 @@ public class MutationReportParser {
         return switch (strykerStatus.toLowerCase()) {
             case "killed" -> "KILLED";
             case "survived" -> "SURVIVED";
-            case "no_coverage" -> "NO_COVERAGE";
+            case "nocoverage", "no_coverage" -> "NO_COVERAGE";
             case "timeout" -> "TIMEOUT";
             case "ignored" -> "IGNORED";
-            case "error" -> "ERROR";
+            case "error", "compileerror" -> "ERROR";
             default -> "UNKNOWN";
         };
     }

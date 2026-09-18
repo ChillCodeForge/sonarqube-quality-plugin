@@ -116,8 +116,15 @@ public class MutationWebService implements WebService {
         
         try (InputStream is = request.paramAsInputStream("report");
              GZIPInputStream gis = new GZIPInputStream(is)) {
-            
+
             NormalizedMutationReport report = parser.parseFromStream(gis);
+            // The report body (raw Stryker JSON) has no reliable project
+            // identifier of its own - the projectKey/branch the caller
+            // passed as query params are the source of truth and must
+            // win, otherwise storeReport() saves under "unknown" and the
+            // project's own /summary lookup never finds it again.
+            report.setProject(projectKey);
+            report.setBranch(branch);
             storage.storeReport(report);
             
             try (JsonWriter json = response.newJsonWriter()) {

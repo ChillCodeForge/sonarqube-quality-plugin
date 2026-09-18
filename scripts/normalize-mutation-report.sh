@@ -31,7 +31,10 @@ normalize_stryker() {
   local branch="$4"
   local commit="$5"
 
-  # Use the official stryker-to-sonar jq filter if available, otherwise basic conversion
+  # Real Stryker mutation.json has no top-level totals - mutants live
+  # directly under .files[path].mutants[], each with its own .status
+  # (Killed/Survived/NoCoverage/Timeout/Ignored/CompileError, case as
+  # written by Stryker). Summary counts must be aggregated from there.
   if command -v jq >/dev/null 2>&1; then
     jq -c --arg tool "stryker" \
       --arg language "typescript" \
@@ -39,6 +42,7 @@ normalize_stryker() {
       --arg branch "$branch" \
       --arg commit "$commit" \
       --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+      (.files | to_entries | map(.value.mutants[] | .status | ascii_downcase)) as $statuses |
       {
         schemaVersion: 1,
         tool: $tool,
@@ -48,23 +52,27 @@ normalize_stryker() {
         commit: $commit,
         timestamp: $timestamp,
         summary: {
-          total: (.totals.mutants | length),
-          killed: (.totals.killed | length),
-          survived: (.totals.survived | length),
-          noCoverage: (.totals.noCoverage | length),
-          timeout: (.totals.timeout | length),
-          ignored: (.totals.ignored | length),
-          score: (if .totals.mutants > 0 then (.totals.killed / .totals.mutants * 100) else 0 end)
+          total: ($statuses | length),
+          killed: ($statuses | map(select(. == "killed")) | length),
+          survived: ($statuses | map(select(. == "survived")) | length),
+          noCoverage: ($statuses | map(select(. == "nocoverage")) | length),
+          timeout: ($statuses | map(select(. == "timeout")) | length),
+          ignored: ($statuses | map(select(. == "ignored")) | length),
+          score: (
+            ($statuses | map(select(. == "killed" or . == "timeout")) | length) as $killedLike |
+            ($statuses | map(select(. == "killed" or . == "timeout" or . == "survived" or . == "nocoverage")) | length) as $valid |
+            if $valid > 0 then ($killedLike / $valid * 100) else 0 end
+          )
         },
         files: (
           .files | to_entries | map({
             path: .key,
             language: "typescript",
-            mutants: .value.mutants | map({
+            mutants: (.value.mutants | map({
               id: .id,
               mutatorName: .mutatorName,
               replacement: .replacement,
-              status: .status | upper,
+              status: .status | ascii_upcase,
               statusReason: .statusReason,
               location: {
                 start: {line: .location.start.line, column: .location.start.column},
@@ -72,7 +80,7 @@ normalize_stryker() {
               },
               coveredBy: .coveredBy,
               static: .static
-            })
+            }))
           })
         ),
         mutants: (
@@ -146,7 +154,7 @@ normalize_mutmut() {
                 id: (.id | tostring),
                 mutatorName: .mutator,
                 replacement: .mutated_code,
-                status: .status | upper,
+                status: .status | ascii_upcase,
                 statusReason: .reason,
                 location: {
                   start: {line: .line_number, column: 1},
@@ -161,7 +169,7 @@ normalize_mutmut() {
             id: (.id | tostring),
             mutatorName: .mutator,
             replacement: .mutated_code,
-            status: .status | upper,
+            status: .status | ascii_upcase,
             statusReason: .reason,
             location: {
               start: {line: .line_number, column: 1},

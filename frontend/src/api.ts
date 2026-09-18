@@ -50,10 +50,25 @@ export async function fetchMutationSummary(projectKey: string, branch: string = 
     const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
       params: { projectKey, branch }
     })
-    if (response.data?.hasReport === false) {
+    const data = response.data
+    if (!data || data.hasReport === false) {
       return null
     }
-    return response.data
+    // Backend field names (mutationScore, totalMutants, killedMutants, ...)
+    // don't match what MutationTesting.tsx expects (score, total, killed,
+    // ...) - map them here so the component's summary.score etc. actually
+    // resolve instead of silently rendering the empty state forever.
+    return {
+      score: data.mutationScore,
+      total: data.totalMutants,
+      killed: data.killedMutants,
+      survived: data.survivedMutants,
+      noCoverage: data.noCoverageMutants,
+      timeout: data.timeoutMutants,
+      ignored: data.ignoredMutants,
+      tool: data.tool,
+      language: data.language,
+    }
   } catch (error) {
     console.error('Failed to fetch mutation summary:', error)
     return null
