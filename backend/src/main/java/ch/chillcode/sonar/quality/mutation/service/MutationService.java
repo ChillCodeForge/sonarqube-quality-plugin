@@ -49,6 +49,21 @@ public class MutationService {
         }
     }
 
+    // Same as processReport() but for a report that was already parsed and
+    // persisted (loaded back from storage) - used by MutationSensor's
+    // primary path, where the report arrived earlier via the upload REST
+    // API rather than as a local file the scanner can read.
+    public void publishMeasures(NormalizedMutationReport report, SensorContext context) {
+        try {
+            writeMeasures(report, context);
+            createIssues(report, context);
+            LOG.info("Published mutation measures: project={}, tool={}, score={}",
+                    report.getProject(), report.getTool(), report.getSummary().getScore());
+        } catch (Exception e) {
+            LOG.error("Failed to publish mutation measures for " + report.getProject(), e);
+        }
+    }
+
     private void writeMeasures(NormalizedMutationReport report, SensorContext context) {
         NormalizedMutationReport.MutationSummary summary = report.getSummary();
 

@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality;
 
 import ch.chillcode.sonar.quality.metrics.MutationMetrics;
+import ch.chillcode.sonar.quality.measure.MutationMeasureComputer;
 import ch.chillcode.sonar.quality.mutation.api.MutationWebService;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
 import ch.chillcode.sonar.quality.sensor.MutationSensor;
@@ -25,6 +26,11 @@ public class QualityPlugin implements Plugin {
 
         // Sensor - will be instantiated with Configuration by SonarQube DI
         context.addExtension(MutationSensor.class);
+
+        // Measure Computer - runs server-side in the Compute Engine (has
+        // access to our storage volume), unlike Sensor which runs inside
+        // the ephemeral scanner container and never sees it.
+        context.addExtension(new MutationMeasureComputer());
 
         // UI Pages
         context.addExtension(new QualityDashboardPage());
