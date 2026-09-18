@@ -104,6 +104,23 @@ public class MutationWebService implements WebService {
             .setRequired(false)
             .setDescription("Branch name (default: main)");
 
+        // SVG badge (shields.io style) - SonarQube's own project badge
+        // endpoint only accepts a fixed whitelist of core metrics and
+        // rejects custom ones like mutation_score with HTTP 400 ("Value
+        // of parameter 'metric' ... must be one of: [coverage, ...]"),
+        // so a live badge for mutation data needs its own endpoint.
+        NewAction badgeAction = controller.createAction("badge")
+            .setDescription("Mutation score badge (SVG, shields.io style)")
+            .setHandler(this::handleBadge);
+
+        badgeAction.createParam("projectKey")
+            .setRequired(true)
+            .setDescription("SonarQube project key");
+
+        badgeAction.createParam("branch")
+            .setRequired(false)
+            .setDescription("Branch name (default: main)");
+
         controller.done();
     }
 
@@ -234,5 +251,74 @@ public class MutationWebService implements WebService {
                 .prop("branch", branch)
                 .endObject();
         }
+    }
+
+    private void handleBadge(Request request, Response response) throws Exception {
+        String projectKey = request.mandatoryParam("projectKey");
+        String branch = request.param("branch");
+        if (branch == null || branch.isEmpty()) {
+            branch = "main";
+        }
+
+        NormalizedMutationReport report = storage.loadReport(projectKey, branch);
+        String label = "mutation score";
+        String value;
+        String color;
+
+        if (report == null) {
+            value = "no report";
+            color = "#9f9f9f"; // grey, shields.io "inactive" convention
+        } else {
+            double score = report.getSummary().getScore();
+            value = String.format("%.1f%%", score);
+            // Same 5-band coloring the UI already uses for the A-E rating
+            // (getRating() in MutationTesting.tsx), so the badge and the
+            // in-app score always agree on what counts as "good".
+            if (score >= 90) color = "#4c1";       // A - bright green
+            else if (score >= 75) color = "#97CA00"; // B - green
+            else if (score >= 60) color = "#dfb317"; // C - yellow
+            else if (score >= 40) color = "#fe7d37"; // D - orange
+            else color = "#e05d44";                   // E - red
+        }
+
+        String svg = buildShieldsBadgeSvg(label, value, color);
+
+        response.stream()
+            .setMediaType("image/svg+xml")
+            .setStatus(200)
+            .output()
+            .write(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    // Minimal flat-style badge, shape/metrics modeled on shields.io's
+    // "flat" template so it looks at home next to coverage/build badges in
+    // a README. No external HTTP call, no dependency - just static SVG
+    // text with widths estimated from character count (good enough for
+    // short label/value strings, avoids pulling in a font-metrics lib).
+    private String buildShieldsBadgeSvg(String label, String value, String color) {
+        int labelWidth = 11 + label.length() * 6;
+        int valueWidth = 14 + value.length() * 6;
+        int totalWidth = labelWidth + valueWidth;
+
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + totalWidth + "\" height=\"20\" role=\"img\" aria-label=\"" + label + ": " + value + "\">"
+            + "<linearGradient id=\"s\" x2=\"0\" y2=\"100%\">"
+            + "<stop offset=\"0\" stop-color=\"#bbb\" stop-opacity=\".1\"/>"
+            + "<stop offset=\"1\" stop-opacity=\".1\"/>"
+            + "</linearGradient>"
+            + "<clipPath id=\"r\"><rect width=\"" + totalWidth + "\" height=\"20\" rx=\"3\" fill=\"#fff\"/></clipPath>"
+            + "<g clip-path=\"url(#r)\">"
+            + "<rect width=\"" + labelWidth + "\" height=\"20\" fill=\"#555\"/>"
+            + "<rect x=\"" + labelWidth + "\" width=\"" + valueWidth + "\" height=\"20\" fill=\"" + color + "\"/>"
+            + "<rect width=\"" + totalWidth + "\" height=\"20\" fill=\"url(#s)\"/>"
+            + "</g>"
+            + "<g fill=\"#fff\" text-anchor=\"middle\" font-family=\"Verdana,Geneva,DejaVu Sans,sans-serif\" font-size=\"11\">"
+            + "<text x=\"" + (labelWidth / 2.0) + "\" y=\"14\">" + escapeXml(label) + "</text>"
+            + "<text x=\"" + (labelWidth + valueWidth / 2.0) + "\" y=\"14\">" + escapeXml(value) + "</text>"
+            + "</g>"
+            + "</svg>";
+    }
+
+    private String escapeXml(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
