@@ -6,13 +6,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
@@ -32,23 +40,43 @@ public class MutationReportParser {
             throw new IllegalArgumentException("Report file does not exist: " + reportFile.getAbsolutePath());
         }
 
-        String content;
+        byte[] content;
         if (reportFile.getName().endsWith(".gz")) {
             try (GZIPInputStream gis = new GZIPInputStream(Files.newInputStream(reportFile.toPath()))) {
-                content = new String(gis.readAllBytes());
+                content = gis.readAllBytes();
             }
         } else {
-            content = Files.readString(reportFile.toPath());
+            content = Files.readAllBytes(reportFile.toPath());
         }
 
+        String logicalName = reportFile.getName().endsWith(".gz")
+                ? reportFile.getName().substring(0, reportFile.getName().length() - 3)
+                : reportFile.getName();
+        return parse(content, logicalName);
+    }
+
+    /**
+     * Parses a report whose format is decided by content, not just the file
+     * name: PIT's mutations.xml is XML, Stryker/mutmut reports are JSON.
+     * fileName is only used as a hint when content sniffing is ambiguous
+     * (e.g. an empty body).
+     */
+    public NormalizedMutationReport parse(byte[] content, String fileName) throws IOException {
+        String text = new String(content, StandardCharsets.UTF_8).stripLeading();
+        boolean looksLikeXml = text.startsWith("<") || (fileName != null && fileName.endsWith(".xml"));
         try {
-            JsonNode root = mapper.readTree(content);
+            if (looksLikeXml) {
+                return parsePitestXml(text);
+            }
+            JsonNode root = mapper.readTree(text);
             NormalizedMutationReport report = detectAndParse(root);
             LOG.info("Parsed mutation report: tool={}, project={}, score={}",
                     report.getTool(), report.getProject(), report.getSummary().getScore());
             return report;
+        } catch (IOException e) {
+            throw e;
         } catch (Exception e) {
-            LOG.error("Failed to parse mutation report: " + reportFile.getAbsolutePath(), e);
+            LOG.error("Failed to parse mutation report: " + fileName, e);
             throw new IOException("Failed to parse mutation report", e);
         }
     }
@@ -77,10 +105,6 @@ public class MutationReportParser {
         // Stryker format detection
         if (root.has("schemaVersion") && root.has("files")) {
             return parseStryker(root);
-        }
-        // Pitest format detection
-        if (root.has("mutations")) {
-            return parsePitest(root);
         }
         // Mutmut format detection
         if (root.has("mutants")) {
@@ -244,9 +268,197 @@ public class MutationReportParser {
         return "unknown";
     }
 
-    private NormalizedMutationReport parsePitest(JsonNode root) {
-        // TODO: Implement Pitest parsing
-        throw new UnsupportedOperationException("Pitest parsing not yet implemented");
+    private NormalizedMutationReport parsePitestXml(String xml) throws IOException {
+        Document doc = parseXmlDocument(xml);
+        Element root = doc.getDocumentElement();
+        if (!"mutations".equals(root.getTagName())) {
+            throw new IOException("Unknown mutation report format (expected <mutations> root, got <"
+                    + root.getTagName() + ">)");
+        }
+
+        NormalizedMutationReport report = new NormalizedMutationReport();
+        report.setSchemaVersion(1);
+        report.setTool("pitest");
+        report.setLanguage("java");
+        report.setProject("unknown");
+        report.setBranch("main");
+        report.setCommit("");
+        report.setTimestamp(LocalDateTime.now());
+
+        int total = 0, killed = 0, survived = 0, noCoverage = 0, timeout = 0, ignored = 0;
+        Map<String, List<NormalizedMutationReport.MutationMutant>> byFile = new HashMap<>();
+        List<NormalizedMutationReport.MutationMutant> allMutants = new ArrayList<>();
+
+        NodeList mutationNodes = root.getElementsByTagName("mutation");
+        for (int i = 0; i < mutationNodes.getLength(); i++) {
+            Element m = (Element) mutationNodes.item(i);
+            NormalizedMutationReport.MutationMutant mutant = parsePitestMutation(m, i);
+            allMutants.add(mutant);
+            byFile.computeIfAbsent(mutant.getFilePath(), k -> new ArrayList<>()).add(mutant);
+
+            total++;
+            switch (mutant.getStatus()) {
+                case "KILLED" -> killed++;
+                case "SURVIVED" -> survived++;
+                case "NO_COVERAGE" -> noCoverage++;
+                case "TIMEOUT" -> timeout++;
+                // NON_VIABLE mutants failed to compile; PIT itself excludes
+                // them from its mutation score, so they are counted here as
+                // ignored rather than survived (a compile failure is not a
+                // gap in test coverage).
+                case "NON_VIABLE" -> ignored++;
+                default -> ignored++;
+            }
+        }
+
+        List<NormalizedMutationReport.MutationFile> files = new ArrayList<>();
+        for (Map.Entry<String, List<NormalizedMutationReport.MutationMutant>> entry : byFile.entrySet()) {
+            NormalizedMutationReport.MutationFile mFile = new NormalizedMutationReport.MutationFile();
+            mFile.setPath(entry.getKey());
+            mFile.setLanguage("java");
+            mFile.setMutants(entry.getValue());
+
+            int fTotal = entry.getValue().size();
+            int fKilled = 0, fSurvived = 0, fNoCoverage = 0, fTimeout = 0, fIgnored = 0;
+            for (NormalizedMutationReport.MutationMutant mutant : entry.getValue()) {
+                switch (mutant.getStatus()) {
+                    case "KILLED" -> fKilled++;
+                    case "SURVIVED" -> fSurvived++;
+                    case "NO_COVERAGE" -> fNoCoverage++;
+                    case "TIMEOUT" -> fTimeout++;
+                    default -> fIgnored++;
+                }
+            }
+            int fValid = fTotal - fIgnored;
+            Map<String, Object> fileMetrics = new HashMap<>();
+            fileMetrics.put("score", fValid > 0 ? (double) fKilled / fValid * 100 : 0.0);
+            fileMetrics.put("total", fTotal);
+            fileMetrics.put("killed", fKilled);
+            fileMetrics.put("survived", fSurvived);
+            fileMetrics.put("noCoverage", fNoCoverage);
+            fileMetrics.put("timeout", fTimeout);
+            fileMetrics.put("ignored", fIgnored);
+            mFile.setMetrics(fileMetrics);
+            files.add(mFile);
+        }
+
+        NormalizedMutationReport.MutationSummary summary = new NormalizedMutationReport.MutationSummary();
+        summary.setTotal(total);
+        summary.setKilled(killed);
+        summary.setSurvived(survived);
+        summary.setNoCoverage(noCoverage);
+        summary.setTimeout(timeout);
+        summary.setIgnored(ignored);
+        int relevant = total - ignored;
+        summary.setScore(relevant > 0 ? (double) killed / relevant * 100 : 0.0);
+
+        report.setSummary(summary);
+        report.setFiles(files);
+        report.setMutants(allMutants);
+
+        LOG.info("Parsed pitest mutation report: score={}, total={}", summary.getScore(), total);
+        return report;
+    }
+
+    private NormalizedMutationReport.MutationMutant parsePitestMutation(Element m, int index) {
+        NormalizedMutationReport.MutationMutant mutant = new NormalizedMutationReport.MutationMutant();
+        mutant.setId("pitest-" + index);
+
+        String mutatedClass = textOf(m, "mutatedClass");
+        String sourceFile = textOf(m, "sourceFile");
+        mutant.setFilePath(classAndSourceFileToPath(mutatedClass, sourceFile));
+
+        mutant.setMutatorName(shortMutatorName(textOf(m, "mutator")));
+        mutant.setReplacement(textOf(m, "description"));
+        mutant.setStatus(mapPitestStatus(m.getAttribute("status")));
+        mutant.setStatusReason("");
+
+        int line = parseIntOrZero(textOf(m, "lineNumber"));
+        NormalizedMutationReport.MutationLocation loc = new NormalizedMutationReport.MutationLocation();
+        NormalizedMutationReport.MutationLocation.Position start = new NormalizedMutationReport.MutationLocation.Position();
+        start.setLine(line);
+        NormalizedMutationReport.MutationLocation.Position end = new NormalizedMutationReport.MutationLocation.Position();
+        end.setLine(line);
+        loc.setStart(start);
+        loc.setEnd(end);
+        mutant.setLocation(loc);
+
+        String killingTest = textOf(m, "killingTest");
+        mutant.setCoveredBy(killingTest.isEmpty() ? List.of() : List.of(killingTest));
+        mutant.setStaticMutant(false);
+
+        return mutant;
+    }
+
+    private String mapPitestStatus(String pitestStatus) {
+        return switch (pitestStatus == null ? "" : pitestStatus.toUpperCase()) {
+            case "KILLED" -> "KILLED";
+            case "SURVIVED" -> "SURVIVED";
+            case "NO_COVERAGE" -> "NO_COVERAGE";
+            case "TIMED_OUT" -> "TIMEOUT";
+            case "NON_VIABLE" -> "NON_VIABLE";
+            default -> "UNKNOWN";
+        };
+    }
+
+    // PIT reports the fully-qualified class and the bare source file name
+    // separately (no path); reconstructing a path from the class package
+    // lets the UI's per-file table group mutants the same way it does for
+    // Stryker's path-keyed files map.
+    private String classAndSourceFileToPath(String mutatedClass, String sourceFile) {
+        if (mutatedClass == null || mutatedClass.isEmpty()) {
+            return sourceFile == null ? "unknown" : sourceFile;
+        }
+        int lastDot = mutatedClass.lastIndexOf('.');
+        if (lastDot < 0) {
+            return sourceFile == null ? mutatedClass : sourceFile;
+        }
+        String packagePath = mutatedClass.substring(0, lastDot).replace('.', '/');
+        String fileName = (sourceFile == null || sourceFile.isEmpty())
+                ? mutatedClass.substring(lastDot + 1) + ".java"
+                : sourceFile;
+        return packagePath + "/" + fileName;
+    }
+
+    private String shortMutatorName(String fqMutatorName) {
+        if (fqMutatorName == null) {
+            return "";
+        }
+        int lastDot = fqMutatorName.lastIndexOf('.');
+        return lastDot < 0 ? fqMutatorName : fqMutatorName.substring(lastDot + 1);
+    }
+
+    private String textOf(Element parent, String tagName) {
+        NodeList nodes = parent.getElementsByTagName(tagName);
+        if (nodes.getLength() == 0) {
+            return "";
+        }
+        String text = nodes.item(0).getTextContent();
+        return text == null ? "" : text;
+    }
+
+    private int parseIntOrZero(String value) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException | NullPointerException e) {
+            return 0;
+        }
+    }
+
+    private Document parseXmlDocument(String xml) throws IOException {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            // Mutation reports are internal CI artifacts, not untrusted
+            // user input, but disabling external entities is a cheap,
+            // permanent guard against XXE regardless of source.
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            return builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IOException("Failed to parse XML mutation report", e);
+        }
     }
 
     private NormalizedMutationReport parseMutmut(JsonNode root) {
