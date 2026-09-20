@@ -1,5 +1,6 @@
 import React from 'react'
 import QualityDashboard from './QualityDashboard'
+import { injectTheme } from './theme'
 
 // SonarQube page-extension contract (docs.sonarsource.com "Adding pages to
 // the webapp" + SonarSource/sonar-custom-plugin-example admin_page/index.js):
@@ -16,6 +17,7 @@ declare global {
 }
 
 window.registerExtension('chillcodequality/quality_dashboard', (options: any) => {
+  injectTheme()
   const componentKey = options?.component?.key ?? ''
   return <QualityDashboard componentKey={componentKey} />
 })

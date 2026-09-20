@@ -42,11 +42,11 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
   }
 
   if (!mutants || mutants.length === 0) {
-    return <div className="empty">No mutants to display</div>
+    return <div className="cq-empty">No mutants to display</div>
   }
 
   return (
-    <div className="mutant-table-container">
+    <div className="cq-mutant-table-container">
       <table>
         <thead>
           <tr>
@@ -62,12 +62,12 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
         <tbody>
           {mutants.map((mutant) => (
             <tr key={mutant.id}>
-              <td className="mutant-id">{mutant.id}</td>
+              <td className="cq-mutant-id">{mutant.id}</td>
               <td>{mutant.mutatorName}</td>
-              <td className="mutant-replacement">{mutant.replacement}</td>
+              <td className="cq-mutant-replacement">{mutant.replacement}</td>
               <td>
                 <span
-                  className="status-badge"
+                  className="cq-status-badge"
                   style={{ backgroundColor: statusColors[mutant.status] || '#8884D8' }}
                 >
                   {statusLabels[mutant.status] || mutant.status}

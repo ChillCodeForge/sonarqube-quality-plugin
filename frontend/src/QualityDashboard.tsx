@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts'
-import Gauge from './components/Gauge'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
 import MetricCard from './components/MetricCard'
 import { fetchQualityMetrics, fetchQualityHistory } from './api'
 
@@ -41,17 +40,29 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
   }
 
   if (loading) {
-    return <div className="loading">Loading quality dashboard...</div>
+    return (
+      <div className="cq-root">
+        <div className="cq-loading">
+          <span className="cq-spinner" />
+          Loading quality dashboard…
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="quality-dashboard">
-      <header>
-        <h1>Quality Overview</h1>
-        <p className="subtitle">Project health at a glance</p>
+    <div className="cq-root">
+      <header className="cq-header">
+        <div className="cq-title-block">
+          <div className="cq-icon-badge">✨</div>
+          <div>
+            <h1>Quality Overview</h1>
+            <p className="cq-subtitle">Project health at a glance</p>
+          </div>
+        </div>
       </header>
 
-      <section className="metrics-grid">
+      <section className="cq-metrics-grid">
         <MetricCard
           title="Reliability"
           value={metrics.find(m => m.key === 'reliability_rating')?.value || 'A'}
@@ -75,49 +86,52 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
           value={`${metrics.find(m => m.key === 'coverage')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'coverage')?.rating}
           trend={metrics.find(m => m.key === 'coverage')?.trend}
+          color="#2f7ff0"
         />
         <MetricCard
           title="Duplications"
           value={`${metrics.find(m => m.key === 'duplicated_lines_density')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'duplicated_lines_density')?.rating}
           trend={metrics.find(m => m.key === 'duplicated_lines_density')?.trend}
+          color="#7c6ff0"
         />
         <MetricCard
           title="Mutation Score"
           value={`${metrics.find(m => m.key === 'mutation_score')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'mutation_score')?.rating}
           trend={metrics.find(m => m.key === 'mutation_score')?.trend}
+          color="#12b886"
         />
       </section>
 
-      <section className="charts-grid">
-        <div className="chart-card">
+      <section className="cq-charts-grid">
+        <div className="cq-chart-card">
           <h2>Quality History (Last 30 Days)</h2>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={history}>
               <defs>
                 <linearGradient id="colorCoverage" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#2f7ff0" stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor="#2f7ff0" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorMutation" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00C49F" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#00C49F" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#12b886" stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor="#12b886" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <XAxis dataKey="date" />
-              <YAxis domain={[0, 100]} />
-              <CartesianGrid strokeDasharray="3 3" />
-              <Tooltip />
-              <Area type="monotone" dataKey="coverage" stroke="#8884d8" fillOpacity={1} fill="url(#colorCoverage)" name="Coverage %" />
-              <Area type="monotone" dataKey="mutation_score" stroke="#00C49F" fillOpacity={1} fill="url(#colorMutation)" name="Mutation Score %" />
+              <XAxis dataKey="date" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
+              <YAxis domain={[0, 100]} tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
+              <Area type="monotone" dataKey="coverage" stroke="#2f7ff0" strokeWidth={2} fillOpacity={1} fill="url(#colorCoverage)" name="Coverage %" />
+              <Area type="monotone" dataKey="mutation_score" stroke="#12b886" strokeWidth={2} fillOpacity={1} fill="url(#colorMutation)" name="Mutation Score %" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="chart-card">
+        <div className="cq-chart-card">
           <h2>Issues by Severity</h2>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={280}>
             <BarChart data={[
               { severity: 'Blocker', count: metrics.find(m => m.key === 'blocker_violations')?.value || 0 },
               { severity: 'Critical', count: metrics.find(m => m.key === 'critical_violations')?.value || 0 },
@@ -125,11 +139,11 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
               { severity: 'Minor', count: metrics.find(m => m.key === 'minor_violations')?.value || 0 },
               { severity: 'Info', count: metrics.find(m => m.key === 'info_violations')?.value || 0 },
             ]}>
-              <XAxis dataKey="severity" />
-              <YAxis />
-              <CartesianGrid strokeDasharray="3 3" />
-              <Tooltip />
-              <Bar dataKey="count" fill="#ff4444" name="Issues" />
+              <XAxis dataKey="severity" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
+              <YAxis tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
+              <Bar dataKey="count" fill="#f2495c" name="Issues" radius={[8, 8, 0, 0]} maxBarSize={56} />
             </BarChart>
           </ResponsiveContainer>
         </div>

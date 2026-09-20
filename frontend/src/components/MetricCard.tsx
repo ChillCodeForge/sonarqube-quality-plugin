@@ -16,11 +16,11 @@ const MetricCard: React.FC<MetricCardProps> = ({
   color
 }) => {
   const ratingColors: Record<string, string> = {
-    A: '#00C49F',
-    B: '#88C0D0',
-    C: '#FFA500',
-    D: '#FF8C00',
-    E: '#FF4444',
+    A: '#12b886',
+    B: '#2f7ff0',
+    C: '#f5a623',
+    D: '#f2495c',
+    E: '#c92a2a',
   }
 
   const trendIcon = {
@@ -30,24 +30,29 @@ const MetricCard: React.FC<MetricCardProps> = ({
   }
 
   const trendColor = {
-    up: '#00C49F',
-    down: '#FF4444',
-    stable: '#8884D8',
+    up: '#12b886',
+    down: '#f2495c',
+    stable: '#7c6ff0',
   }
 
+  const accent = color || (rating ? ratingColors[rating] : undefined)
+
   return (
-    <div className="metric-card">
-      <div className="metric-title">{title}</div>
-      <div className="metric-value" style={{ color: color || 'inherit' }}>
+    <div
+      className="cq-metric-card"
+      style={accent ? ({ '--cq-accent': accent } as React.CSSProperties) : undefined}
+    >
+      <div className="cq-metric-title">{title}</div>
+      <div className="cq-metric-value" style={{ color: color || 'inherit' }}>
         {value}
+        {rating && (
+          <span className="cq-metric-rating" style={{ backgroundColor: ratingColors[rating] }}>
+            {rating}
+          </span>
+        )}
       </div>
-      {rating && (
-        <div className="metric-rating" style={{ backgroundColor: ratingColors[rating] }}>
-          {rating}
-        </div>
-      )}
       {trend && (
-        <div className="metric-trend" style={{ color: trendColor[trend] }}>
+        <div className="cq-metric-trend" style={{ color: trendColor[trend] }}>
           {trendIcon[trend]} {trend}
         </div>
       )}

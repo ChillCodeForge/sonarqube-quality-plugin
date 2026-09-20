@@ -1,0 +1,341 @@
+/* ChillCode Quality Plugin — shared design system for both page extensions.
+   Injected once per page via injectTheme() (see theme.ts) because the Vite
+   build produces a single self-contained IIFE per page (see vite.config.ts
+   comments) — no separate .css asset is loaded by SonarQube's page-extension
+   runtime, so the styles must travel inside the JS bundle. */
+
+:root {
+  --cq-bg: #f4f6f9;
+  --cq-surface: #ffffff;
+  --cq-surface-2: #fafbfd;
+  --cq-border: #e4e8f0;
+  --cq-text: #1b2430;
+  --cq-text-muted: #6b7686;
+  --cq-radius: 14px;
+  --cq-radius-sm: 9px;
+  --cq-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.06);
+  --cq-shadow-hover: 0 4px 10px rgba(16, 24, 40, 0.06), 0 10px 28px rgba(16, 24, 40, 0.10);
+
+  --cq-green: #12b886;
+  --cq-green-soft: rgba(18, 184, 134, 0.12);
+  --cq-red: #f2495c;
+  --cq-red-soft: rgba(242, 73, 92, 0.12);
+  --cq-amber: #f5a623;
+  --cq-amber-soft: rgba(245, 166, 35, 0.12);
+  --cq-violet: #7c6ff0;
+  --cq-violet-soft: rgba(124, 111, 240, 0.12);
+  --cq-blue: #2f7ff0;
+  --cq-blue-soft: rgba(47, 127, 240, 0.12);
+
+  --cq-gradient-brand: linear-gradient(135deg, #2f7ff0 0%, #7c6ff0 55%, #b06ff0 100%);
+}
+
+.cq-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--cq-text);
+  background: var(--cq-bg);
+  padding: 28px 32px 48px;
+  animation: cq-fade-in 0.35s ease both;
+}
+
+@keyframes cq-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cq-root header.cq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--cq-border);
+}
+
+.cq-root header.cq-header .cq-title-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cq-root header.cq-header .cq-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--cq-gradient-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 6px 16px rgba(124, 111, 240, 0.35);
+  flex-shrink: 0;
+}
+
+.cq-root h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cq-root .cq-subtitle {
+  margin: 2px 0 0;
+  color: var(--cq-text-muted);
+  font-size: 13.5px;
+}
+
+.cq-root .cq-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--cq-surface-2);
+  border: 1px solid var(--cq-border);
+  color: var(--cq-text-muted);
+}
+
+.cq-root .cq-summary-grid,
+.cq-root .cq-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.cq-root .cq-metric-card {
+  position: relative;
+  background: var(--cq-surface);
+  border: 1px solid var(--cq-border);
+  border-radius: var(--cq-radius);
+  padding: 18px 18px 16px;
+  box-shadow: var(--cq-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+}
+
+.cq-root .cq-metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--cq-accent, var(--cq-gradient-brand));
+}
+
+.cq-root .cq-metric-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--cq-shadow-hover);
+}
+
+.cq-root .cq-metric-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cq-text-muted);
+  margin-bottom: 8px;
+}
+
+.cq-root .cq-metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cq-root .cq-metric-rating {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.cq-root .cq-metric-trend {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cq-root .cq-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.cq-root .cq-chart-card {
+  background: var(--cq-surface);
+  border: 1px solid var(--cq-border);
+  border-radius: var(--cq-radius);
+  padding: 20px 20px 8px;
+  box-shadow: var(--cq-shadow);
+}
+
+.cq-root .cq-chart-card h2,
+.cq-root .cq-files-section h2 {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cq-root .cq-gauge-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.cq-root .cq-files-section,
+.cq-root .cq-mutants-detail {
+  background: var(--cq-surface);
+  border: 1px solid var(--cq-border);
+  border-radius: var(--cq-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--cq-shadow);
+}
+
+.cq-root table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cq-root thead th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cq-text-muted);
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--cq-border);
+  position: sticky;
+  top: 0;
+  background: var(--cq-surface);
+  z-index: 1;
+}
+
+.cq-root tbody tr {
+  transition: background 0.12s ease;
+}
+
+.cq-root tbody tr:nth-child(even) {
+  background: var(--cq-surface-2);
+}
+
+.cq-root tbody tr:hover {
+  background: var(--cq-blue-soft);
+  cursor: pointer;
+}
+
+.cq-root tbody tr.cq-selected {
+  background: var(--cq-violet-soft);
+}
+
+.cq-root tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cq-border);
+}
+
+.cq-root .cq-files-table-container,
+.cq-root .cq-mutant-table-container {
+  max-height: 480px;
+  overflow: auto;
+  border-radius: var(--cq-radius-sm);
+}
+
+.cq-root .cq-mutant-id,
+.cq-root .cq-mutant-replacement {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.cq-root .cq-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.cq-root .cq-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cq-root .cq-detail-header h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.cq-root .cq-close-btn {
+  border: 1px solid var(--cq-border);
+  background: var(--cq-surface-2);
+  color: var(--cq-text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.cq-root .cq-close-btn:hover {
+  background: var(--cq-red-soft);
+  color: var(--cq-red);
+}
+
+.cq-root .cq-close-btn:active {
+  transform: scale(0.97);
+}
+
+.cq-root .cq-loading,
+.cq-root .cq-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  color: var(--cq-text-muted);
+  font-size: 14px;
+  gap: 10px;
+}
+
+.cq-root .cq-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid var(--cq-border);
+  border-top-color: var(--cq-blue);
+  animation: cq-spin 0.7s linear infinite;
+}
+
+@keyframes cq-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cq-root .cq-gauge svg circle:nth-child(2) {
+  filter: drop-shadow(0 0 6px currentColor);
+}

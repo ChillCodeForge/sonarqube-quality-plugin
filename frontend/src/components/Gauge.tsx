@@ -26,14 +26,14 @@ const Gauge: React.FC<GaugeProps> = ({
   else if (value >= 50) strokeColor = colors[1]
 
   return (
-    <div className="gauge" style={{ width: size, height: size }}>
+    <div className="cq-gauge" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#e0e0e0"
+          stroke="#e9ecf3"
           strokeWidth={strokeWidth}
         />
         <circle
@@ -47,7 +47,7 @@ const Gauge: React.FC<GaugeProps> = ({
           strokeDashoffset={dashOffset}
           strokeLinecap="round"
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+          style={{ color: strokeColor, transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}
         />
         {showValue && (
           <text
