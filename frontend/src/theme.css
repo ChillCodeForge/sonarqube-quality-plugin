@@ -5,29 +5,30 @@
    runtime, so the styles must travel inside the JS bundle. */
 
 :root {
-  --cq-bg: #f4f6f9;
-  --cq-surface: #ffffff;
-  --cq-surface-2: #fafbfd;
-  --cq-border: #e4e8f0;
-  --cq-text: #1b2430;
-  --cq-text-muted: #6b7686;
+  --cq-bg: #10131a;
+  --cq-surface: #181c25;
+  --cq-surface-2: #1f2430;
+  --cq-border: #2b3140;
+  --cq-text: #e7eaf2;
+  --cq-text-muted: #8b93a7;
   --cq-radius: 14px;
   --cq-radius-sm: 9px;
-  --cq-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.06);
-  --cq-shadow-hover: 0 4px 10px rgba(16, 24, 40, 0.06), 0 10px 28px rgba(16, 24, 40, 0.10);
+  --cq-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --cq-shadow-hover: 0 6px 14px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
 
-  --cq-green: #12b886;
-  --cq-green-soft: rgba(18, 184, 134, 0.12);
-  --cq-red: #f2495c;
-  --cq-red-soft: rgba(242, 73, 92, 0.12);
-  --cq-amber: #f5a623;
-  --cq-amber-soft: rgba(245, 166, 35, 0.12);
-  --cq-violet: #7c6ff0;
-  --cq-violet-soft: rgba(124, 111, 240, 0.12);
-  --cq-blue: #2f7ff0;
-  --cq-blue-soft: rgba(47, 127, 240, 0.12);
+  --cq-green: #2ee6ac;
+  --cq-green-soft: rgba(46, 230, 172, 0.16);
+  --cq-red: #ff6b7d;
+  --cq-red-soft: rgba(255, 107, 125, 0.16);
+  --cq-amber: #ffb84d;
+  --cq-amber-soft: rgba(255, 184, 77, 0.16);
+  --cq-violet: #9a90ff;
+  --cq-violet-soft: rgba(154, 144, 255, 0.16);
+  --cq-blue: #5b9dff;
+  --cq-blue-soft: rgba(91, 157, 255, 0.16);
+  --cq-red-deep: #e0405a;
 
-  --cq-gradient-brand: linear-gradient(135deg, #2f7ff0 0%, #7c6ff0 55%, #b06ff0 100%);
+  --cq-gradient-brand: linear-gradient(135deg, #4f8dff 0%, #8f7dff 55%, #c078ff 100%);
 }
 
 .cq-root {

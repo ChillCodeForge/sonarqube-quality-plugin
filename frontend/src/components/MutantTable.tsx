@@ -20,14 +20,14 @@ interface MutantTableProps {
 
 const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
   const statusColors: Record<string, string> = {
-    KILLED: '#00C49F',
-    SURVIVED: '#FF4444',
-    NO_COVERAGE: '#FFA500',
-    TIMEOUT: '#8884D8',
-    IGNORED: '#8884D8',
-    ERROR: '#FF4444',
-    COMPILE_ERROR: '#FF4444',
-    RUNTIME_ERROR: '#FF4444',
+    KILLED: 'var(--cq-green)',
+    SURVIVED: 'var(--cq-red)',
+    NO_COVERAGE: 'var(--cq-amber)',
+    TIMEOUT: 'var(--cq-violet)',
+    IGNORED: 'var(--cq-violet)',
+    ERROR: 'var(--cq-red)',
+    COMPILE_ERROR: 'var(--cq-red)',
+    RUNTIME_ERROR: 'var(--cq-red)',
   }
 
   const statusLabels: Record<string, string> = {
@@ -68,7 +68,7 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
               <td>
                 <span
                   className="cq-status-badge"
-                  style={{ backgroundColor: statusColors[mutant.status] || '#8884D8' }}
+                  style={{ backgroundColor: statusColors[mutant.status] || 'var(--cq-violet)' }}
                 >
                   {statusLabels[mutant.status] || mutant.status}
                 </span>

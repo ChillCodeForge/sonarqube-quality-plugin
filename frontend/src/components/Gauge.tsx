@@ -12,7 +12,7 @@ const Gauge: React.FC<GaugeProps> = ({
   value = 0,
   size = 120,
   strokeWidth = 12,
-  colors = ['#FF4444', '#FFA500', '#00C49F'],
+  colors = ['var(--cq-red)', 'var(--cq-amber)', 'var(--cq-green)'],
   showValue = true
 }) => {
   const radius = (size - strokeWidth) / 2
@@ -33,7 +33,7 @@ const Gauge: React.FC<GaugeProps> = ({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#e9ecf3"
+          stroke="var(--cq-border)"
           strokeWidth={strokeWidth}
         />
         <circle

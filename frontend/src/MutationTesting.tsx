@@ -30,11 +30,11 @@ interface MutationTestingProps {
 }
 
 const COLORS = {
-  killed: '#12b886',
-  survived: '#f2495c',
-  noCoverage: '#f5a623',
-  timeout: '#7c6ff0',
-  ignored: '#2f7ff0',
+  killed: 'var(--cq-green)',
+  survived: 'var(--cq-red)',
+  noCoverage: 'var(--cq-amber)',
+  timeout: 'var(--cq-violet)',
+  ignored: 'var(--cq-blue)',
 }
 
 const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 'main' }) => {
@@ -141,12 +141,13 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
                 dataKey="value"
                 nameKey="name"
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                style={{ fill: 'var(--cq-text)' }}
               >
                 {[COLORS.killed, COLORS.survived, COLORS.noCoverage, COLORS.timeout, COLORS.ignored].map((color, i) => (
                   <Cell key={`cell-${i}`} fill={color} stroke="var(--cq-surface)" strokeWidth={2} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -160,7 +161,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
               <XAxis dataKey="label" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <YAxis domain={[0, 100]} tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
               <Bar dataKey="score" fill={COLORS.killed} name="Score %" radius={[8, 8, 0, 0]} maxBarSize={72} />
             </BarChart>
           </ResponsiveContainer>
@@ -222,11 +223,11 @@ function getRating(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
 
 function ratingColor(rating: 'A' | 'B' | 'C' | 'D' | 'E'): string {
   const colors: Record<string, string> = {
-    A: '#12b886',
-    B: '#2f7ff0',
-    C: '#f5a623',
-    D: '#f2495c',
-    E: '#c92a2a',
+    A: 'var(--cq-green)',
+    B: 'var(--cq-blue)',
+    C: 'var(--cq-amber)',
+    D: 'var(--cq-red)',
+    E: 'var(--cq-red-deep)',
   }
   return colors[rating]
 }

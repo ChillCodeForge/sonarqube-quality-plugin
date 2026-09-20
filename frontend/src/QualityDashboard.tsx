@@ -86,21 +86,21 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
           value={`${metrics.find(m => m.key === 'coverage')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'coverage')?.rating}
           trend={metrics.find(m => m.key === 'coverage')?.trend}
-          color="#2f7ff0"
+          color="var(--cq-blue)"
         />
         <MetricCard
           title="Duplications"
           value={`${metrics.find(m => m.key === 'duplicated_lines_density')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'duplicated_lines_density')?.rating}
           trend={metrics.find(m => m.key === 'duplicated_lines_density')?.trend}
-          color="#7c6ff0"
+          color="var(--cq-violet)"
         />
         <MetricCard
           title="Mutation Score"
           value={`${metrics.find(m => m.key === 'mutation_score')?.value || 0}%`}
           rating={metrics.find(m => m.key === 'mutation_score')?.rating}
           trend={metrics.find(m => m.key === 'mutation_score')?.trend}
-          color="#12b886"
+          color="var(--cq-green)"
         />
       </section>
 
@@ -111,20 +111,20 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
             <AreaChart data={history}>
               <defs>
                 <linearGradient id="colorCoverage" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2f7ff0" stopOpacity={0.35}/>
-                  <stop offset="95%" stopColor="#2f7ff0" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="var(--cq-blue)" stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor="var(--cq-blue)" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorMutation" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#12b886" stopOpacity={0.35}/>
-                  <stop offset="95%" stopColor="#12b886" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="var(--cq-green)" stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor="var(--cq-green)" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <YAxis domain={[0, 100]} tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
-              <Area type="monotone" dataKey="coverage" stroke="#2f7ff0" strokeWidth={2} fillOpacity={1} fill="url(#colorCoverage)" name="Coverage %" />
-              <Area type="monotone" dataKey="mutation_score" stroke="#12b886" strokeWidth={2} fillOpacity={1} fill="url(#colorMutation)" name="Mutation Score %" />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
+              <Area type="monotone" dataKey="coverage" stroke="var(--cq-blue)" strokeWidth={2} fillOpacity={1} fill="url(#colorCoverage)" name="Coverage %" />
+              <Area type="monotone" dataKey="mutation_score" stroke="var(--cq-green)" strokeWidth={2} fillOpacity={1} fill="url(#colorMutation)" name="Mutation Score %" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -142,8 +142,8 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
               <XAxis dataKey="severity" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <YAxis tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)' }} />
-              <Bar dataKey="count" fill="#f2495c" name="Issues" radius={[8, 8, 0, 0]} maxBarSize={56} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
+              <Bar dataKey="count" fill="var(--cq-red)" name="Issues" radius={[8, 8, 0, 0]} maxBarSize={56} />
             </BarChart>
           </ResponsiveContainer>
         </div>

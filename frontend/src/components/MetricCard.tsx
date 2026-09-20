@@ -16,11 +16,11 @@ const MetricCard: React.FC<MetricCardProps> = ({
   color
 }) => {
   const ratingColors: Record<string, string> = {
-    A: '#12b886',
-    B: '#2f7ff0',
-    C: '#f5a623',
-    D: '#f2495c',
-    E: '#c92a2a',
+    A: 'var(--cq-green)',
+    B: 'var(--cq-blue)',
+    C: 'var(--cq-amber)',
+    D: 'var(--cq-red)',
+    E: 'var(--cq-red-deep)',
   }
 
   const trendIcon = {
@@ -30,9 +30,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
   }
 
   const trendColor = {
-    up: '#12b886',
-    down: '#f2495c',
-    stable: '#7c6ff0',
+    up: 'var(--cq-green)',
+    down: 'var(--cq-red)',
+    stable: 'var(--cq-violet)',
   }
 
   const accent = color || (rating ? ratingColors[rating] : undefined)
