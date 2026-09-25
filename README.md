@@ -1,304 +1,150 @@
 # ChillCode SonarQube Quality Plugin
 
-## Overview
+SonarQube plugin for mutation-testing data. It adds mutation metrics, a quality dashboard, a mutation-results page, report storage, an SVG badge endpoint, and an upload API for CI.
 
-This plugin extends SonarQube Community Edition with:
-- **Quality Dashboard** - Unified view of Reliability, Security, Maintainability, Coverage, Duplications, Mutation Score
-- **Mutation Testing UI** - Detailed mutation testing results with mutant exploration
-- **Mutation Report Storage API** - Upload, download, and query mutation reports
-- **Sensor** - Processes mutation reports during SonarQube analysis
-- **Custom Metrics** - Mutation Score, Total/Killed/Survived/No Coverage/Timeout/Ignored counts
+## Supported report inputs
 
-## Architecture
+| Report source | Upload input | Conversion needed |
+|---|---|---|
+| Stryker | Raw `mutation.json` | No. The plugin parses Stryker JSON directly. |
+| PITest | Raw `mutations.xml` | No. The plugin parses PITest XML directly. |
+| mutmut 3.x | `mutants/` artifacts from `mutmut run` | Yes. Use the bundled `scripts/mutmut_to_stryker.py` converter or wrapper. |
+| Stryker-compatible JSON | JSON with `schemaVersion` and `files` | No. The plugin parses it directly. |
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   CI Pipeline   │────▶│  SonarScanner    │────▶│   SonarQube      │
-│  (Normalize +   │     │  (Measures +     │     │  (Plugin:        │
-│   Upload)       │     │   Issues)        │     │   Metrics,       │
-└─────────────────┘     └──────────────────┘     │   Issues,        │
-                                                 │   Storage API,   │
-                          ┌──────────────────┐   │   Web Pages)     │
-                          │  Artifact Keeper │   └────────┬─────────┘
-                          │  (Full Reports)  │            │
-                          └──────────────────┘            │
-                                                          ▼
-                                                 ┌──────────────────┐
-                                                 │  Browser UI      │
-                                                 │  (Quality Dash,  │
-                                                 │   Mutation UI)   │
-                                                 └──────────────────┘
-```
+Raw mutmut JSON is **not** accepted. The bundled converter maps mutmut's on-disk metadata to the Stryker-compatible shape already handled by the plugin. mutmut does not retain one source location per mutation, so reported locations are accurate at function granularity.
 
-## Installation
+## Compatibility
 
-### Prerequisites
-- SonarQube 26.8+ (Community/Developer/Enterprise)
-- Java 21 runtime
+The Maven build targets Java 21 and SonarQube plugin API `13.5.0.4319`; its SonarQube dependency is `26.8.0.126808`. The deployed ChillCode stack currently uses SonarQube Community `26.9.0.129388`.
 
-### Deploy via Portainer/Swarm
+## Build
 
-1. **Build the plugin:**
-```bash
-cd backend
-mvn clean package
-# Output: target/sonarqube-quality-plugin-1.0.0-SNAPSHOT.jar
-```
+Build the frontend before packaging the plugin. The frontend build writes the two self-contained SonarQube page-extension bundles into `backend/src/main/resources/static/`.
 
-2. **Add volumes to SonarQube stack** (already done in homelab-docker-compose):
-```yaml
-volumes:
-  - /mnt/docker/volume/sonarqube/plugins:/opt/sonarqube/extensions/plugins
-  - /mnt/docker/volume/sonarqube/mutation-reports:/opt/sonarqube/mutation-reports
-```
-
-3. **Deploy plugin JAR** to `/mnt/docker/volume/sonarqube/plugins/` on the SonarQube host
-
-4. **Restart SonarQube** service
-
-### Configuration
-
-Set in SonarQube Administration → Configuration → ChillCode Quality:
-```
-chillcode.mutation.storage=/opt/sonarqube/mutation-reports
-chillcode.mutation.maxReportSize=52428800
-chillcode.mutation.retention.prDays=14
-chillcode.mutation.apiToken=<optional-token-for-CI-upload>
-```
-
-## CI Pipeline Integration
-
-### 1. Normalize Mutation Reports
-
-Each tool produces different output formats. Use the normalizer script:
-
-```bash
-# Stryker (TypeScript/JavaScript)
-./normalize-mutation-report.sh stryker \
-  frontend/reports/mutation/mutation.json \
-  /tmp/mutation-report.json \
-  nutrition main $(git rev-parse HEAD)
-
-# mutmut (Python)
-./normalize-mutation-report.sh mutmut \
-  .mutmut-results \
-  /tmp/mutation-report.json \
-  nutrition main $(git rev-parse HEAD)
-
-# Output: /tmp/mutation-report.json.gz
-```
-
-### 2. Upload to SonarQube
-
-```bash
-./upload-mutation-report.sh \
-  nutrition main $(git rev-parse HEAD) \
-  /tmp/mutation-report.json.gz \
-  https://sonar.chillcode.de \
-  $SONAR_TOKEN
-```
-
-### 3. Complete `.drone.yml` Example (nutrition)
-
-```yaml
-- name: frontend-mutation-tests
-  image: registry.chillcode.de/dockerhub-cache/node:22
-  environment:
-    NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
-    NPM_CONFIG_AUDIT: "false"
-    SONAR_TOKEN:
-      from_secret: sonar_token
-    SONAR_HOST_URL:
-      from_secret: sonar_host_url
-  commands:
-    - |
-      MUTATION_DAYS="2 5"
-      TODAY=$(date -u +%u)
-      if [ "${DRONE_BUILD_EVENT}" = "cron" ] && ! echo "$MUTATION_DAYS" | grep -qw "$TODAY"; then
-        echo "Mutation tests run on UTC days $MUTATION_DAYS, today is $TODAY - skipped."
-        exit 0
-      fi
-    - cd frontend
-    - npm ci
-    - npm run test:mutate
-    - |
-      # Normalize and upload
-      PROJECT_KEY="nutrition"
-      BRANCH="${DRONE_BRANCH:-main}"
-      COMMIT="${DRONE_COMMIT_SHA}"
-      REPORT_JSON="reports/mutation/mutation.json"
-      REPORT_GZ="/tmp/mutation-report.json.gz"
-      
-      # Normalize
-      /path/to/normalize-mutation-report.sh stryker \
-        "$REPORT_JSON" "$REPORT_GZ" \
-        "$PROJECT_KEY" "$BRANCH" "$COMMIT"
-      
-      # Upload to SonarQube plugin storage
-      /path/to/upload-mutation-report.sh \
-        "$PROJECT_KEY" "$BRANCH" "$COMMIT" \
-        "$REPORT_GZ" \
-        "$$SONAR_HOST_URL" "$$SONAR_TOKEN"
-```
-
-## API Endpoints
-
-### Upload Report
-```
-POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}&commit={sha}
-Content-Type: application/json
-Authorization: Bearer <token>
-
-Body: Normalized Mutation Report JSON (gzipped)
-```
-
-### Download Report
-```
-GET /api/chillcode_mutation/download?projectKey={key}&branch={branch}
-Authorization: Bearer <token> (optional for public projects)
-```
-
-### Get Summary
-```
-GET /api/chillcode_mutation/summary?projectKey={key}&branch={branch}
-```
-
-### Get Status
-```
-GET /api/chillcode_mutation/status?projectKey={key}&branch={branch}
-```
-
-### Delete Report
-```
-POST /api/chillcode_mutation/delete?projectKey={key}&branch={branch}
-Authorization: Bearer <token>
-```
-
-## Mutation Report Schema (v1)
-
-```json
-{
-  "schemaVersion": 1,
-  "tool": "stryker|pitest|mutmut",
-  "language": "typescript|java|python",
-  "project": "sonarqube-project-key",
-  "branch": "main",
-  "commit": "abc123def",
-  "timestamp": "2026-09-17T12:00:00Z",
-  "summary": {
-    "total": 1284,
-    "killed": 1091,
-    "survived": 83,
-    "noCoverage": 52,
-    "timeout": 0,
-    "ignored": 58,
-    "score": 84.97
-  },
-  "files": [...],
-  "mutants": [...]
-}
-```
-
-## Quality Gates
-
-Add Mutation Score to Quality Gate:
-1. Administration → Quality Gates → Create/Edit
-2. Add condition: `mutation_score < 60` → Error
-3. Assign to projects
-
-## Gitea Integration
-
-The upload script can also post commit status:
-
-```bash
-# In upload-mutation-report.sh, add:
-curl -X POST "https://git.chillcode.de/api/v1/repos/{owner}/{repo}/statuses/${COMMIT}" \
-  -H "Authorization: token ${GITEA_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "state": "success",
-    "context": "mutation-testing",
-    "description": "Mutation score: 84.97%",
-    "target_url": "https://sonar.chillcode.de/project/'${PROJECT_KEY}'/mutation-testing"
-  }'
-```
-
-## Development
-
-### Backend
-```bash
-cd backend
-mvn compile
-mvn test
-mvn package
-```
-
-### Frontend
 ```bash
 cd frontend
-npm install
-npm run dev      # Development server
-npm run build    # Build to ../backend/src/main/resources/static
+npm ci
+npm run build
+
+cd ../backend
+mvn clean verify package
 ```
 
-### Frontend Entry Points
-- `quality-dashboard.tsx` → Quality Dashboard page
-- `mutation-testing.tsx` → Mutation Testing page
+The artifact is `backend/target/sonarqube-quality-plugin-1.0.0-SNAPSHOT.jar`.
 
-Built assets go to `backend/src/main/resources/static/` and are served by the plugin.
+## Install or upgrade
 
-## Plugin Structure
+Replacing a SonarQube plugin JAR requires a SonarQube restart or stack redeployment. Plan a maintenance window: SonarQube is unavailable while it starts and loads the plugin.
 
-```
-sonarqube-quality-plugin/
-├── backend/
-│   ├── pom.xml
-│   └── src/main/
-│       ├── java/ch/chillcode/sonar/quality/
-│       │   ├── QualityPlugin.java           # Entry point
-│       │   ├── metrics/MutationMetrics.java # Custom metrics
-│       │   ├── sensor/MutationSensor.java   # Analysis sensor
-│       │   ├── mutation/
-│       │   │   ├── model/                   # Report POJOs
-│       │   │   ├── parser/                  # JSON parser
-│       │   │   ├── storage/                 # File storage service
-│       │   │   ├── service/                 # Business logic
-│       │   │   └── api/                     # REST API
-│       │   ├── config/QualityConfiguration.java
-│       │   └── ui/                          # Web page definitions
-│       └── resources/static/                # Built React apps
-├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── src/
-│       ├── quality-dashboard.tsx
-│       ├── mutation-testing.tsx
-│       ├── components/
-│       └── api.ts
-├── scripts/
-│   ├── normalize-mutation-report.sh
-│   └── upload-mutation-report.sh
-├── schemas/
-│   └── mutation-report-v1.schema.json
-└── docs/
+1. Build the frontend and JAR as above.
+2. Copy exactly one version of the plugin JAR into SonarQube's plugin directory. The ChillCode Swarm deployment uses `/mnt/docker/volume/sonarqube/plugins/`, mounted at `/opt/sonarqube/extensions/plugins/`.
+3. Ensure the persistent report directory exists and is writable by the SonarQube container user. The ChillCode deployment uses `/mnt/docker/volume/sonarqube/mutation-reports/`, mounted at `/opt/sonarqube/mutation-reports/`.
+4. Redeploy or restart SonarQube through the configured `homelab-docker-compose/sonarqube/docker-compose.yaml` stack.
+5. Verify the startup log reports the plugin loading, then open the project Quality Dashboard and Mutation Testing pages.
+
+The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are stored under the `projectKey` and `branch` submitted with the upload request; those request parameters override report metadata.
+
+## CI upload
+
+The upload API expects a gzip-compressed report in a multipart form field named `report`:
+
+```bash
+curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -F "report=@report.json.gz;type=application/gzip" \
+  "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
 
-## Troubleshooting
+Use the target SonarQube server's configured authentication policy and keep credentials out of source code and logs.
 
-| Issue | Solution |
-|-------|----------|
-| Plugin not loading | Check SonarQube logs: `docker logs sonarqube-app`; verify JAR in `/opt/sonarqube/extensions/plugins/` |
-| Storage permission denied | Ensure `/mnt/docker/volume/sonarqube/mutation-reports` is writable by SonarQube container user (UID 1000) |
-| Custom metrics not showing | Restart SonarQube after plugin install; metrics are registered at startup |
-| API 401 Unauthorized | Set `chillcode.mutation.apiToken` or use SonarQube user token in Authorization header |
-| Frontend not loading | Verify `mvn package` copied built assets to `src/main/resources/static/` |
+A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures.
 
-## Version Compatibility
+### Stryker
 
-| Plugin Version | SonarQube Version | Java Version |
-|----------------|-------------------|--------------|
-| 1.0.x          | 26.8+ (LTS)       | 21           |
+```bash
+gzip -c reports/mutation/mutation.json > /tmp/stryker-mutation.json.gz
+curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -F "report=@/tmp/stryker-mutation.json.gz;type=application/gzip" \
+  "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
+```
+
+### PITest
+
+```bash
+gzip -c target/pit-reports/mutations.xml > /tmp/pitest-mutations.xml.gz
+curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -F "report=@/tmp/pitest-mutations.xml.gz;type=application/gzip" \
+  "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
+```
+
+### mutmut
+
+```bash
+python3 scripts/mutmut_to_stryker.py mutants . "$PROJECT_KEY" > /tmp/mutmut-stryker.json
+gzip -c /tmp/mutmut-stryker.json > /tmp/mutmut-stryker.json.gz
+curl --fail --silent --show-error -X POST \
+  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -F "report=@/tmp/mutmut-stryker.json.gz;type=application/gzip" \
+  "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
+```
+
+`scripts/normalize-mutation-report.sh` is a convenience wrapper. For Stryker and PITest it only gzip-compresses the native report; for mutmut it invokes the bundled Python converter. Its final optional argument is the source root used to map mutmut artifact paths back to real Python files.
+
+```bash
+# Stryker or PITest
+./scripts/normalize-mutation-report.sh stryker reports/mutation/mutation.json /tmp/stryker
+./scripts/normalize-mutation-report.sh pitest target/pit-reports/mutations.xml /tmp/pitest
+
+# mutmut: argument 7 is the source root
+./scripts/normalize-mutation-report.sh mutmut mutants /tmp/mutmut \
+  "$PROJECT_KEY" main "$(git rev-parse HEAD)" .
+```
+
+Each command writes `<output-file>.gz`. `scripts/upload-mutation-report.sh` accepts that artifact:
+
+```bash
+./scripts/upload-mutation-report.sh \
+  "$PROJECT_KEY" "${DRONE_BRANCH:-main}" "$(git rev-parse HEAD)" \
+  /tmp/mutmut.gz "$SONAR_HOST_URL" "$SONAR_TOKEN"
+```
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}` | Store a gzip-compressed Stryker JSON, PITest XML, or normalized report. `report` is required multipart data. |
+| `GET /api/chillcode_mutation/download?projectKey={key}&branch={branch}` | Return the stored normalized report. |
+| `GET /api/chillcode_mutation/summary?projectKey={key}&branch={branch}` | Return mutation score and aggregate counts. |
+| `GET /api/chillcode_mutation/status?projectKey={key}&branch={branch}` | Return whether a report exists and its basic score data. |
+| `POST /api/chillcode_mutation/delete?projectKey={key}&branch={branch}` | Delete the stored report for a project/branch. |
+| `GET /api/chillcode_mutation/badge?projectKey={key}&branch={branch}` | Return a mutation-score SVG badge. |
+
+`branch` defaults to `main` when omitted.
+
+## Quality gate
+
+After a report has been uploaded and a later analysis has published the custom measure, add `mutation_score < 60` as an Error condition to the relevant SonarQube Quality Gate.
+
+## Development checks
+
+```bash
+(cd frontend && npm ci && npm run build)
+(cd backend && mvn verify)
+python3 scripts/tests/test_normalize_mutation_report.py
+bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
+```
+
+## Repository layout
+
+```text
+backend/     SonarQube plugin, API, storage, parser, metrics, and pages
+frontend/    React page extensions built into backend resources
+scripts/     Upload helper and mutation-report converters
+schemas/     Normalized report schema
+```
 
 ## License
 
-MIT License - see LICENSE file.
+MIT License. See `LICENSE`.
