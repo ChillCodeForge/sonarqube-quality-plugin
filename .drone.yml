@@ -58,6 +58,7 @@ steps:
           -Dsonar.java.test.binaries=backend/target/test-classes \
           -Dsonar.coverage.jacoco.xmlReportPaths=backend/target/site/jacoco/jacoco.xml \
           -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/** \
+          -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="$${DRONE_COMMIT_SHA}"
     depends_on:
