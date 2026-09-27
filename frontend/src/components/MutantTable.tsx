@@ -1,21 +1,21 @@
-import React from 'react'
+import React from 'react';
 
 interface Mutant {
-  id: string
-  mutatorName: string
-  replacement: string
-  status: string
-  statusReason: string
+  id: string;
+  mutatorName: string;
+  replacement: string;
+  status: string;
+  statusReason: string;
   location?: {
-    start: { line: number; column: number }
-    end: { line: number; column: number }
-  }
-  coveredBy: string[]
-  static: boolean
+    start: { line: number; column: number };
+    end: { line: number; column: number };
+  };
+  coveredBy: string[];
+  static: boolean;
 }
 
 interface MutantTableProps {
-  mutants: Mutant[]
+  mutants: Mutant[];
 }
 
 const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
@@ -28,7 +28,7 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
     ERROR: 'var(--cq-red)',
     COMPILE_ERROR: 'var(--cq-red)',
     RUNTIME_ERROR: 'var(--cq-red)',
-  }
+  };
 
   const statusLabels: Record<string, string> = {
     KILLED: 'Killed',
@@ -39,10 +39,10 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
     ERROR: 'Error',
     COMPILE_ERROR: 'Compile Error',
     RUNTIME_ERROR: 'Runtime Error',
-  }
+  };
 
   if (!mutants || mutants.length === 0) {
-    return <div className="cq-empty">No mutants to display</div>
+    return <div className="cq-empty">No mutants to display</div>;
   }
 
   return (
@@ -78,7 +78,10 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
                   <>
                     L{mutant.location.start.line}:C{mutant.location.start.column}
                     {mutant.location.end && (
-                      <> – L{mutant.location.end.line}:C{mutant.location.end.column}</>
+                      <>
+                        {' '}
+                        – L{mutant.location.end.line}:C{mutant.location.end.column}
+                      </>
                     )}
                   </>
                 ) : (
@@ -92,7 +95,7 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
         </tbody>
       </table>
     </div>
-  )
-}
+  );
+};
 
-export default MutantTable
+export default MutantTable;

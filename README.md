@@ -46,11 +46,13 @@ The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are st
 
 ## CI upload
 
-The upload API expects a gzip-compressed report in a multipart form field named `report`:
+The upload API expects a gzip-compressed report in a multipart form field named `report` and a `MUTATION_UPLOAD_TOKEN` bearer credential. Production reads that token from the Docker Swarm secret mounted at `/run/secrets/chillcode_mutation_upload_token`; inject the same value into CI as the `MUTATION_UPLOAD_TOKEN` secret. It is distinct from an optional `SONAR_TOKEN`, which is used only when the helper also runs SonarScanner. Never pass either token on a command line or commit it.
+
+The Swarm secret is immutable. Rotate it by creating a new secret name, updating the SonarQube service with `--secret-rm` and `--secret-add` targeting `chillcode_mutation_upload_token`, verifying the rollout and authenticated upload, then deleting the old secret. Update the Drone `mutation_upload_token` secret before that controlled rotation; the normal deploy deliberately refuses an empty value and never overwrites an existing Swarm secret.
 
 ```bash
 curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
   -F "report=@report.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -64,7 +66,7 @@ A successful upload stores the report. A subsequent SonarQube analysis of that p
 ```bash
 gzip -c reports/mutation/mutation.json > /tmp/stryker-mutation.json.gz
 curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
   -F "report=@/tmp/stryker-mutation.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -74,7 +76,7 @@ curl --fail --silent --show-error -X POST \
 ```bash
 gzip -c target/pit-reports/mutations.xml > /tmp/pitest-mutations.xml.gz
 curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
   -F "report=@/tmp/pitest-mutations.xml.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -85,7 +87,7 @@ curl --fail --silent --show-error -X POST \
 python3 scripts/mutmut_to_stryker.py mutants . "$PROJECT_KEY" > /tmp/mutmut-stryker.json
 gzip -c /tmp/mutmut-stryker.json > /tmp/mutmut-stryker.json.gz
 curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
   -F "report=@/tmp/mutmut-stryker.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -105,20 +107,20 @@ curl --fail --silent --show-error -X POST \
 Each command writes `<output-file>.gz`. `scripts/upload-mutation-report.sh` accepts that artifact:
 
 ```bash
-./scripts/upload-mutation-report.sh \
+MUTATION_UPLOAD_TOKEN="$MUTATION_UPLOAD_TOKEN" ./scripts/upload-mutation-report.sh \
   "$PROJECT_KEY" "${DRONE_BRANCH:-main}" "$(git rev-parse HEAD)" \
-  /tmp/mutmut.gz "$SONAR_HOST_URL" "$SONAR_TOKEN"
+  /tmp/mutmut.gz "$SONAR_HOST_URL"
 ```
 
 ## API
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}` | Store a gzip-compressed Stryker JSON, PITest XML, or normalized report. `report` is required multipart data. |
+| `POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}` | Store a gzip-compressed Stryker JSON, PITest XML, or normalized report. `report` is required multipart data. Requires `Authorization: Bearer $MUTATION_UPLOAD_TOKEN`. |
 | `GET /api/chillcode_mutation/download?projectKey={key}&branch={branch}` | Return the stored normalized report. |
 | `GET /api/chillcode_mutation/summary?projectKey={key}&branch={branch}` | Return mutation score and aggregate counts. |
 | `GET /api/chillcode_mutation/status?projectKey={key}&branch={branch}` | Return whether a report exists and its basic score data. |
-| `POST /api/chillcode_mutation/delete?projectKey={key}&branch={branch}` | Delete the stored report for a project/branch. |
+| `POST /api/chillcode_mutation/delete?projectKey={key}&branch={branch}` | Delete the stored report for a project/branch. Requires `Authorization: Bearer $MUTATION_UPLOAD_TOKEN`. |
 | `GET /api/chillcode_mutation/badge?projectKey={key}&branch={branch}` | Return a mutation-score SVG badge. |
 
 `branch` defaults to `main` when omitted.

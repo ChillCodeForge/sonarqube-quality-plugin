@@ -32,7 +32,7 @@
 }
 
 .cq-root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   color: var(--cq-text);
   background: var(--cq-bg);
   padding: 28px 32px 48px;
@@ -40,8 +40,14 @@
 }
 
 @keyframes cq-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .cq-root header.cq-header {
@@ -115,12 +121,14 @@
   border-radius: var(--cq-radius);
   padding: 18px 18px 16px;
   box-shadow: var(--cq-shadow);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
   overflow: hidden;
 }
 
 .cq-root .cq-metric-card::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0 0 auto 0;
   height: 3px;
@@ -301,7 +309,9 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
 }
 
 .cq-root .cq-close-btn:hover {
@@ -334,7 +344,9 @@
 }
 
 @keyframes cq-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .cq-root .cq-gauge svg circle:nth-child(2) {

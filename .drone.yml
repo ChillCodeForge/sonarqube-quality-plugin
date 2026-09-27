@@ -1,0 +1,206 @@
+---
+kind: pipeline
+type: docker
+name: quality-and-deploy
+
+clone:
+  image: drone/git:1.6.0
+
+steps:
+  - name: frontend-quality
+    image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
+    environment:
+      NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
+      NPM_CONFIG_AUDIT: "false"
+    commands:
+      - cd frontend
+      - npm ci
+      - npm run lint
+      - npm run format:check
+      - npm run typecheck
+      - npm run build
+
+  - name: backend-verify
+    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    commands:
+      - mvn --batch-mode --no-transfer-progress -f backend/pom.xml clean verify
+    depends_on:
+      - frontend-quality
+
+  - name: converter-regression-tests
+    image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
+    commands:
+      - python3 scripts/tests/test_normalize_mutation_report.py
+      - python3 -m py_compile scripts/mutmut_to_stryker.py
+      - bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
+    depends_on:
+      - backend-verify
+
+  - name: sonarqube-analysis
+    image: registry.chillcode.de/dockerhub-cache/sonarsource/sonar-scanner-cli:12
+    environment:
+      SONAR_HOST_URL: https://sonar.chillcode.de
+      SONAR_TOKEN:
+        from_secret: sonar_token
+    commands:
+      - |
+        set -eu
+        test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
+        sonar-scanner \
+          -Dsonar.host.url="$${SONAR_HOST_URL}" \
+          -Dsonar.token="$${SONAR_TOKEN}" \
+          -Dsonar.projectKey=sonarqube-quality-plugin \
+          -Dsonar.projectName='SonarQube Quality Plugin' \
+          -Dsonar.sources=backend/src/main/java,frontend/src,scripts \
+          -Dsonar.tests=backend/src/test,scripts/tests \
+          -Dsonar.test.inclusions=**/*Test.java,**/test_*.py \
+          -Dsonar.java.binaries=backend/target/classes \
+          -Dsonar.java.test.binaries=backend/target/test-classes \
+          -Dsonar.coverage.jacoco.xmlReportPaths=backend/target/site/jacoco/jacoco.xml \
+          -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/** \
+          -Dsonar.qualitygate.wait=true \
+          -Dsonar.scm.revision="$${DRONE_COMMIT_SHA}"
+    depends_on:
+      - converter-regression-tests
+    when:
+      ref:
+        - refs/heads/master
+      event:
+        - push
+
+  - name: run-megalinter
+    image: registry.chillcode.de/dockerhub-cache/oxsecurity/megalinter:v9.4.0
+    environment:
+      DEFAULT_WORKSPACE: /drone/src
+      REPORT_OUTPUT_FOLDER: megalinter-reports
+      JSON_REPORTER: "true"
+      SARIF_REPORTER: "true"
+    depends_on:
+      - converter-regression-tests
+
+  - name: deploy-plugin
+    image: registry.chillcode.de/dockerhub-cache/library/alpine:3.21
+    environment:
+      DEPLOY_KEY_B64:
+        from_secret: sonarqube_plugin_deploy_key
+      MUTATION_UPLOAD_TOKEN:
+        from_secret: mutation_upload_token
+    commands:
+      - |
+        set -eu
+        artifact=backend/target/sonarqube-quality-plugin-1.0.0-SNAPSHOT.jar
+        test -f "$${artifact}"
+        apk add --no-cache openssh-client >/dev/null
+        mkdir -p ~/.ssh
+        echo "$${DEPLOY_KEY_B64}" | base64 -d > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        install -m 600 .ci/infra-swarm-known_hosts ~/.ssh/known_hosts
+        artifact_sha=$$(sha256sum "$${artifact}" | awk '{print $$1}')
+        test -n "$${MUTATION_UPLOAD_TOKEN}"
+        if ! ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 \
+          'sudo -n docker secret inspect sonarqube_mutation_upload_token >/dev/null 2>&1'; then
+          printf '%s' "$${MUTATION_UPLOAD_TOKEN}" \
+            | ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 \
+              'sudo -n docker secret create sonarqube_mutation_upload_token - >/dev/null'
+        fi
+        scp -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 "$${artifact}" ansible@192.168.178.30:/tmp/sonarqube-quality-plugin.jar
+        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 "sh -s -- $${artifact_sha}" <<'REMOTE'
+          set -eu
+          expected_sha="$$1"
+          plugin_dir=/mnt/docker/volume/sonarqube/plugins
+          target="$$plugin_dir/sonarqube-quality-plugin-1.0.0-SNAPSHOT.jar"
+          backup="$${target}.previous"
+          candidate=/tmp/sonarqube-quality-plugin.jar
+          succeeded=false
+          mutation_started=false
+          target_existed=false
+          running_tasks() {
+            docker service ps --filter desired-state=running --format '{{.ID}}|{{.CurrentState}}' sonarqube_sonarqube-app \
+              | awk -F'|' '$$2 ~ /^Running/ {print $$1}'
+          }
+          service_has_upload_secret() {
+            sudo -n docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Secrets}}{{println .SecretName}}{{end}}' sonarqube_sonarqube-app \
+              | grep -Fxq sonarqube_mutation_upload_token
+          }
+          service_has_legacy_upload_token() {
+            sudo -n docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' sonarqube_sonarqube-app \
+              | grep -Fq 'CHILLCODE_MUTATION_UPLOAD_TOKEN='
+          }
+          force_rollout() {
+            if service_has_legacy_upload_token; then
+              prior_tasks=$$(running_tasks)
+              sudo -n docker service update --env-rm CHILLCODE_MUTATION_UPLOAD_TOKEN sonarqube_sonarqube-app >/dev/null
+              wait_for_rollout "$$prior_tasks"
+            fi
+            prior_tasks=$$(running_tasks)
+            if service_has_upload_secret; then
+              sudo -n docker service update --force sonarqube_sonarqube-app >/dev/null
+            else
+              sudo -n docker service update \
+                --secret-add source=sonarqube_mutation_upload_token,target=chillcode_mutation_upload_token,mode=0444 \
+                --force sonarqube_sonarqube-app >/dev/null
+            fi
+            wait_for_rollout "$$prior_tasks"
+          }
+          wait_for_rollout() {
+            prior_tasks="$$1"
+            deadline=$$(($$(date +%s) + 300))
+            while :; do
+              current_tasks=$$(running_tasks)
+              update_state=$$(docker service inspect --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' sonarqube_sonarqube-app)
+              if [ "$$update_state" = completed ] \
+                && [ -n "$$current_tasks" ] \
+                && ! printf '%s\n' "$$current_tasks" | grep -Fqx "$$prior_tasks" \
+                && curl -fsS http://127.0.0.1:9000/api/system/status >/dev/null; then
+                return 0
+              fi
+              [ $$(date +%s) -lt $$deadline ] || return 1
+              sleep 5
+            done
+          }
+          restore() {
+            trap - EXIT HUP INT TERM
+            [ "$$succeeded" = true ] && return
+            [ "$$mutation_started" = true ] || return
+            if [ "$$target_existed" = true ]; then
+              sudo -n install -o ansible -g ansible -m 0644 "$$backup" "$$target"
+              force_rollout
+              test "$$(sha256sum "$$target" | awk '{print $$1}')" = "$$previous_sha"
+            else
+              sudo -n rm -f "$$target"
+              force_rollout
+            fi
+          }
+          test "$$(sha256sum "$$candidate" | awk '{print $$1}')" = "$$expected_sha"
+          if [ -f "$$target" ]; then
+            target_existed=true
+            cp "$$target" "$$backup"
+            previous_sha=$$(sha256sum "$$backup" | awk '{print $$1}')
+          else
+            previous_sha=''
+          fi
+          trap restore EXIT HUP INT TERM
+          mutation_started=true
+          sudo -n install -o ansible -g ansible -m 0644 "$$candidate" "$$target"
+          rm -f "$$candidate"
+          force_rollout
+          test "$$(sha256sum "$$target" | awk '{print $$1}')" = "$$expected_sha"
+          succeeded=true
+          rm -f "$$backup"
+        REMOTE
+    depends_on:
+      - sonarqube-analysis
+      - run-megalinter
+    when:
+      ref:
+        - refs/heads/master
+      event:
+        - push
+
+trigger:
+  ref:
+    - refs/heads/master
+    - refs/pull/**
+  event:
+    - pull_request
+    - push

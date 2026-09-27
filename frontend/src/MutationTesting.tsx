@@ -1,32 +1,43 @@
-import React, { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import Gauge from './components/Gauge'
-import MetricCard from './components/MetricCard'
-import MutantTable from './components/MutantTable'
-import { fetchMutationReport, fetchMutationSummary } from './api'
+import React, { useState, useEffect } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import Gauge from './components/Gauge';
+import MetricCard from './components/MetricCard';
+import MutantTable from './components/MutantTable';
+import { fetchMutationReport, fetchMutationSummary } from './api';
 
 interface MutationSummary {
-  score: number
-  total: number
-  killed: number
-  survived: number
-  noCoverage: number
-  timeout: number
-  ignored: number
-  tool: string
-  language: string
+  score: number;
+  total: number;
+  killed: number;
+  survived: number;
+  noCoverage: number;
+  timeout: number;
+  ignored: number;
+  tool: string;
+  language: string;
 }
 
 interface MutationFile {
-  path: string
-  language: string
-  mutants: any[]
-  metrics: any
+  path: string;
+  language: string;
+  mutants: any[];
+  metrics: any;
 }
 
 interface MutationTestingProps {
-  projectKey: string
-  branch?: string
+  projectKey: string;
+  branch?: string;
 }
 
 const COLORS = {
@@ -35,34 +46,34 @@ const COLORS = {
   noCoverage: 'var(--cq-amber)',
   timeout: 'var(--cq-violet)',
   ignored: 'var(--cq-blue)',
-}
+};
 
 const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 'main' }) => {
-  const [summary, setSummary] = useState<MutationSummary | null>(null)
-  const [files, setFiles] = useState<MutationFile[]>([])
-  const [selectedFile, setSelectedFile] = useState<MutationFile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState<MutationSummary | null>(null);
+  const [files, setFiles] = useState<MutationFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<MutationFile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData()
-  }, [projectKey, branch])
+    loadData();
+  }, [projectKey, branch]);
 
   const loadData = async () => {
     try {
       const [summaryData, reportData] = await Promise.all([
         fetchMutationSummary(projectKey, branch),
-        fetchMutationReport(projectKey, branch)
-      ])
-      setSummary(summaryData)
+        fetchMutationReport(projectKey, branch),
+      ]);
+      setSummary(summaryData);
       if (reportData?.files) {
-        setFiles(reportData.files)
+        setFiles(reportData.files);
       }
     } catch (error) {
-      console.error('Failed to load mutation data:', error)
+      console.error('Failed to load mutation data:', error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -72,7 +83,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
           Loading mutation testing results…
         </div>
       </div>
-    )
+    );
   }
 
   if (!summary || summary.score === undefined || summary.score === null) {
@@ -80,7 +91,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
       <div className="cq-root">
         <div className="cq-empty">No mutation testing data available for this project</div>
       </div>
-    )
+    );
   }
 
   return (
@@ -99,13 +110,24 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
       </header>
 
       <section className="cq-summary-grid">
-        <div className="cq-metric-card cq-gauge-card" style={{ '--cq-accent': ratingColor(getRating(summary.score)) } as React.CSSProperties}>
-          <Gauge value={summary.score} size={84} strokeWidth={9} colors={[COLORS.survived, COLORS.noCoverage, COLORS.killed]} />
+        <div
+          className="cq-metric-card cq-gauge-card"
+          style={{ '--cq-accent': ratingColor(getRating(summary.score)) } as React.CSSProperties}
+        >
+          <Gauge
+            value={summary.score}
+            size={84}
+            strokeWidth={9}
+            colors={[COLORS.survived, COLORS.noCoverage, COLORS.killed]}
+          />
           <div>
             <div className="cq-metric-title">Mutation Score</div>
             <div className="cq-metric-value">
               {summary.score.toFixed(1)}%
-              <span className="cq-metric-rating" style={{ backgroundColor: ratingColor(getRating(summary.score)) }}>
+              <span
+                className="cq-metric-rating"
+                style={{ backgroundColor: ratingColor(getRating(summary.score)) }}
+              >
                 {getRating(summary.score)}
               </span>
             </div>
@@ -143,11 +165,24 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
                 style={{ fill: 'var(--cq-text)' }}
               >
-                {[COLORS.killed, COLORS.survived, COLORS.noCoverage, COLORS.timeout, COLORS.ignored].map((color, i) => (
+                {[
+                  COLORS.killed,
+                  COLORS.survived,
+                  COLORS.noCoverage,
+                  COLORS.timeout,
+                  COLORS.ignored,
+                ].map((color, i) => (
                   <Cell key={`cell-${i}`} fill={color} stroke="var(--cq-surface)" strokeWidth={2} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 10,
+                  border: '1px solid var(--cq-border)',
+                  background: 'var(--cq-surface)',
+                  color: 'var(--cq-text)',
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -155,14 +190,33 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
         <div className="cq-chart-card">
           <h2>Mutation Score</h2>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={[
-              { label: 'Current', score: summary.score },
-            ]}>
-              <XAxis dataKey="label" tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
-              <YAxis domain={[0, 100]} tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--cq-border)' }} />
+            <BarChart data={[{ label: 'Current', score: summary.score }]}>
+              <XAxis
+                dataKey="label"
+                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
+                axisLine={{ stroke: 'var(--cq-border)' }}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
+                axisLine={{ stroke: 'var(--cq-border)' }}
+              />
               <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--cq-border)', background: 'var(--cq-surface)', color: 'var(--cq-text)' }} />
-              <Bar dataKey="score" fill={COLORS.killed} name="Score %" radius={[8, 8, 0, 0]} maxBarSize={72} />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 10,
+                  border: '1px solid var(--cq-border)',
+                  background: 'var(--cq-surface)',
+                  color: 'var(--cq-text)',
+                }}
+              />
+              <Bar
+                dataKey="score"
+                fill={COLORS.killed}
+                name="Score %"
+                radius={[8, 8, 0, 0]}
+                maxBarSize={72}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -185,14 +239,24 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
             </thead>
             <tbody>
               {files.map((file, index) => (
-                <tr key={index} onClick={() => setSelectedFile(file)} className={selectedFile === file ? 'cq-selected' : ''}>
+                <tr
+                  key={index}
+                  onClick={() => setSelectedFile(file)}
+                  className={selectedFile === file ? 'cq-selected' : ''}
+                >
                   <td>{file.path}</td>
                   <td>{file.language}</td>
                   <td>{file.mutants?.length || 0}</td>
                   <td>{file.metrics?.score?.toFixed(1) || 'N/A'}%</td>
-                  <td style={{ color: COLORS.killed, fontWeight: 600 }}>{file.metrics?.killed || 0}</td>
-                  <td style={{ color: COLORS.survived, fontWeight: 600 }}>{file.metrics?.survived || 0}</td>
-                  <td style={{ color: COLORS.noCoverage, fontWeight: 600 }}>{file.metrics?.noCoverage || 0}</td>
+                  <td style={{ color: COLORS.killed, fontWeight: 600 }}>
+                    {file.metrics?.killed || 0}
+                  </td>
+                  <td style={{ color: COLORS.survived, fontWeight: 600 }}>
+                    {file.metrics?.survived || 0}
+                  </td>
+                  <td style={{ color: COLORS.noCoverage, fontWeight: 600 }}>
+                    {file.metrics?.noCoverage || 0}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -204,21 +268,23 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
         <section className="cq-mutants-detail">
           <div className="cq-detail-header">
             <h3>Mutants in {selectedFile.path}</h3>
-            <button className="cq-close-btn" onClick={() => setSelectedFile(null)}>Close</button>
+            <button className="cq-close-btn" onClick={() => setSelectedFile(null)}>
+              Close
+            </button>
           </div>
           <MutantTable mutants={selectedFile.mutants || []} />
         </section>
       )}
     </div>
-  )
-}
+  );
+};
 
 function getRating(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
-  if (score >= 90) return 'A'
-  if (score >= 75) return 'B'
-  if (score >= 60) return 'C'
-  if (score >= 40) return 'D'
-  return 'E'
+  if (score >= 90) return 'A';
+  if (score >= 75) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 40) return 'D';
+  return 'E';
 }
 
 function ratingColor(rating: 'A' | 'B' | 'C' | 'D' | 'E'): string {
@@ -228,8 +294,8 @@ function ratingColor(rating: 'A' | 'B' | 'C' | 'D' | 'E'): string {
     C: 'var(--cq-amber)',
     D: 'var(--cq-red)',
     E: 'var(--cq-red-deep)',
-  }
-  return colors[rating]
+  };
+  return colors[rating];
 }
 
-export default MutationTesting
+export default MutationTesting;

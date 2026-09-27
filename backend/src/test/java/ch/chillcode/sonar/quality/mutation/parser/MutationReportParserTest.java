@@ -1,24 +1,24 @@
 package ch.chillcode.sonar.quality.mutation.parser;
 
-import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
-import org.junit.jupiter.api.Test;
-
-import java.io.IOException;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
+import java.io.IOException;
+import org.junit.jupiter.api.Test;
+
 class MutationReportParserTest {
 
-    private final MutationReportParser parser = new MutationReportParser();
+  private final MutationReportParser parser = new MutationReportParser();
 
-    // --- Pitest XML ---
+  // --- Pitest XML ---
 
-    @Test
-    void parsesPitestXmlWithMixedStatuses() throws IOException {
-        String xml = """
+  @Test
+  void parsesPitestXmlWithMixedStatuses() throws IOException {
+    String xml =
+        """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <mutations partial="false">
                     <mutation detected="true" status="KILLED" numberOfTestsRun="3">
@@ -70,30 +70,31 @@ class MutationReportParserTest {
                 </mutations>
                 """;
 
-        NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
+    NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
 
-        assertEquals("pitest", report.getTool());
-        assertEquals("java", report.getLanguage());
-        assertEquals(5, report.getSummary().getTotal());
-        assertEquals(1, report.getSummary().getKilled());
-        assertEquals(1, report.getSummary().getSurvived());
-        assertEquals(1, report.getSummary().getNoCoverage());
-        assertEquals(1, report.getSummary().getTimeout());
-        // NON_VIABLE (compile-error mutants) must not silently disappear;
-        // treated as ignored so they neither count as killed nor survived.
-        assertEquals(1, report.getSummary().getIgnored());
+    assertEquals("pitest", report.getTool());
+    assertEquals("java", report.getLanguage());
+    assertEquals(5, report.getSummary().getTotal());
+    assertEquals(1, report.getSummary().getKilled());
+    assertEquals(1, report.getSummary().getSurvived());
+    assertEquals(1, report.getSummary().getNoCoverage());
+    assertEquals(1, report.getSummary().getTimeout());
+    // NON_VIABLE (compile-error mutants) must not silently disappear;
+    // treated as ignored so they neither count as killed nor survived.
+    assertEquals(1, report.getSummary().getIgnored());
 
-        // Score excludes ignored (NON_VIABLE) mutants from the denominator,
-        // matching PIT's own "test strength" semantics: 1 killed out of
-        // (5 - 1 ignored) = 4 relevant mutants = 25%.
-        assertEquals(25.0, report.getSummary().getScore(), 0.001);
+    // Score excludes ignored (NON_VIABLE) mutants from the denominator,
+    // matching PIT's own "test strength" semantics: 1 killed out of
+    // (5 - 1 ignored) = 4 relevant mutants = 25%.
+    assertEquals(25.0, report.getSummary().getScore(), 0.001);
 
-        assertEquals(2, report.getFiles().size());
-    }
+    assertEquals(2, report.getFiles().size());
+  }
 
-    @Test
-    void mapsPitestFilePathsUsingMutatedClassPackage() throws IOException {
-        String xml = """
+  @Test
+  void mapsPitestFilePathsUsingMutatedClassPackage() throws IOException {
+    String xml =
+        """
                 <mutations>
                     <mutation detected="true" status="KILLED" numberOfTestsRun="1">
                         <sourceFile>Widget.java</sourceFile>
@@ -107,26 +108,27 @@ class MutationReportParserTest {
                 </mutations>
                 """;
 
-        NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
+    NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
 
-        assertEquals(1, report.getFiles().size());
-        assertEquals("de/doccomplete/backend/Widget.java", report.getFiles().get(0).getPath());
-    }
+    assertEquals(1, report.getFiles().size());
+    assertEquals("de/doccomplete/backend/Widget.java", report.getFiles().get(0).getPath());
+  }
 
-    @Test
-    void pitestReportWithZeroMutationsHasZeroScoreNotNaN() throws IOException {
-        String xml = "<mutations></mutations>";
+  @Test
+  void pitestReportWithZeroMutationsHasZeroScoreNotNaN() throws IOException {
+    String xml = "<mutations></mutations>";
 
-        NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
+    NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
 
-        assertEquals(0, report.getSummary().getTotal());
-        assertEquals(0.0, report.getSummary().getScore(), 0.001);
-        assertFalse(Double.isNaN(report.getSummary().getScore()));
-    }
+    assertEquals(0, report.getSummary().getTotal());
+    assertEquals(0.0, report.getSummary().getScore(), 0.001);
+    assertFalse(Double.isNaN(report.getSummary().getScore()));
+  }
 
-    @Test
-    void allNonViableMutationsYieldZeroScoreNotDivisionByZero() throws IOException {
-        String xml = """
+  @Test
+  void allNonViableMutationsYieldZeroScoreNotDivisionByZero() throws IOException {
+    String xml =
+        """
                 <mutations>
                     <mutation detected="false" status="NON_VIABLE" numberOfTestsRun="0">
                         <sourceFile>A.java</sourceFile>
@@ -140,33 +142,35 @@ class MutationReportParserTest {
                 </mutations>
                 """;
 
-        NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
+    NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
 
-        assertEquals(1, report.getSummary().getTotal());
-        assertEquals(1, report.getSummary().getIgnored());
-        assertEquals(0.0, report.getSummary().getScore(), 0.001);
-        assertFalse(Double.isNaN(report.getSummary().getScore()));
-    }
+    assertEquals(1, report.getSummary().getTotal());
+    assertEquals(1, report.getSummary().getIgnored());
+    assertEquals(0.0, report.getSummary().getScore(), 0.001);
+    assertFalse(Double.isNaN(report.getSummary().getScore()));
+  }
 
-    // --- Format detection ---
+  // --- Format detection ---
 
-    @Test
-    void detectsPitestFormatFromMutationsRootElement() throws IOException {
-        String xml = "<mutations></mutations>";
-        NormalizedMutationReport report = parser.parse(xml.getBytes(), "report.xml");
-        assertEquals("pitest", report.getTool());
-    }
+  @Test
+  void detectsPitestFormatFromMutationsRootElement() throws IOException {
+    String xml = "<mutations></mutations>";
+    NormalizedMutationReport report = parser.parse(xml.getBytes(), "report.xml");
+    assertEquals("pitest", report.getTool());
+  }
 
-    @Test
-    void rejectsUnknownXmlRootElement() {
-        String xml = "<somethingElse></somethingElse>";
-        assertThrows(IOException.class, () -> parser.parse(xml.getBytes(), "report.xml"));
-    }
+  @Test
+  void rejectsUnknownXmlRootElement() {
+    String xml = "<somethingElse></somethingElse>";
+    assertThrows(IOException.class, () -> parser.parse(xml.getBytes(), "report.xml"));
+  }
 
-    @Test
-    void mutmutStillUnsupportedAndFailsLoudlyNotSilently() {
-        String json = "{\"mutants\": []}";
-        IOException ex = assertThrows(IOException.class, () -> parser.parse(json));
-        assertTrue(ex.getMessage().contains("mutmut") || ex.getCause() instanceof UnsupportedOperationException);
-    }
+  @Test
+  void mutmutStillUnsupportedAndFailsLoudlyNotSilently() {
+    String json = "{\"mutants\": []}";
+    IOException ex = assertThrows(IOException.class, () -> parser.parse(json));
+    assertTrue(
+        ex.getMessage().contains("mutmut")
+            || ex.getCause() instanceof UnsupportedOperationException);
+  }
 }

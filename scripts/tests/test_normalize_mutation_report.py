@@ -85,6 +85,7 @@ class NormalizeMutationReportTest(unittest.TestCase):
             environment = os.environ | {
                 "PATH": f"{temporary_root}:{os.environ['PATH']}",
                 "CAPTURED_CURL_ARGUMENTS": str(arguments_file),
+                "MUTATION_UPLOAD_TOKEN": "test-mutation-upload-token",
             }
             subprocess.run(
                 [
@@ -95,7 +96,6 @@ class NormalizeMutationReportTest(unittest.TestCase):
                     "deadbeef",
                     str(report_file),
                     "https://sonar.example.test",
-                    "test-token",
                 ],
                 check=True,
                 capture_output=True,
@@ -105,7 +105,7 @@ class NormalizeMutationReportTest(unittest.TestCase):
 
             arguments = arguments_file.read_text(encoding="utf-8").splitlines()
 
-        self.assertIn("Authorization: Bearer test-token", arguments)
+        self.assertIn("Authorization: Bearer test-mutation-upload-token", arguments)
         self.assertIn("report=@%s;type=application/gzip" % report_file, arguments)
 
 

@@ -1,6 +1,6 @@
-import React from 'react'
-import QualityDashboard from './QualityDashboard'
-import { injectTheme } from './theme'
+import React from 'react';
+import QualityDashboard from './QualityDashboard';
+import { injectTheme } from './theme';
 
 // SonarQube page-extension contract (docs.sonarsource.com "Adding pages to
 // the webapp" + SonarSource/sonar-custom-plugin-example admin_page/index.js):
@@ -12,12 +12,12 @@ import { injectTheme } from './theme'
 // ReactDOM/createRoot call needed here.
 declare global {
   interface Window {
-    registerExtension: (key: string, callback: (options: any) => React.ReactElement) => void
+    registerExtension: (key: string, callback: (options: any) => React.ReactElement) => void;
   }
 }
 
 window.registerExtension('chillcodequality/quality_dashboard', (options: any) => {
-  injectTheme()
-  const componentKey = options?.component?.key ?? ''
-  return <QualityDashboard componentKey={componentKey} />
-})
+  injectTheme();
+  const componentKey = options?.component?.key ?? '';
+  return <QualityDashboard componentKey={componentKey} />;
+});

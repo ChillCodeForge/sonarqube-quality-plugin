@@ -1,11 +1,11 @@
-import React from 'react'
+import React from 'react';
 
 interface GaugeProps {
-  value: number // 0-100
-  size?: number
-  strokeWidth?: number
-  colors?: string[]
-  showValue?: boolean
+  value: number; // 0-100
+  size?: number;
+  strokeWidth?: number;
+  colors?: string[];
+  showValue?: boolean;
 }
 
 const Gauge: React.FC<GaugeProps> = ({
@@ -13,17 +13,17 @@ const Gauge: React.FC<GaugeProps> = ({
   size = 120,
   strokeWidth = 12,
   colors = ['var(--cq-red)', 'var(--cq-amber)', 'var(--cq-green)'],
-  showValue = true
+  showValue = true,
 }) => {
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const progress = Math.max(0, Math.min(100, value)) / 100
-  const dashOffset = circumference * (1 - progress)
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(0, Math.min(100, value)) / 100;
+  const dashOffset = circumference * (1 - progress);
 
   // Determine color based on value
-  let strokeColor = colors[0]
-  if (value >= 75) strokeColor = colors[2]
-  else if (value >= 50) strokeColor = colors[1]
+  let strokeColor = colors[0];
+  if (value >= 75) strokeColor = colors[2];
+  else if (value >= 50) strokeColor = colors[1];
 
   return (
     <div className="cq-gauge" style={{ width: size, height: size }}>
@@ -47,7 +47,10 @@ const Gauge: React.FC<GaugeProps> = ({
           strokeDashoffset={dashOffset}
           strokeLinecap="round"
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ color: strokeColor, transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}
+          style={{
+            color: strokeColor,
+            transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
         />
         {showValue && (
           <text
@@ -64,7 +67,7 @@ const Gauge: React.FC<GaugeProps> = ({
         )}
       </svg>
     </div>
-  )
-}
+  );
+};
 
-export default Gauge
+export default Gauge;

@@ -1,0 +1,38 @@
+apiVersion: quality.chillcode/v1
+
+contract:
+  base: quality-v1
+
+security:
+  baseline: security-v1
+  artifactVersion: '1.2.1'
+
+languages:
+  node: true
+  java: true
+
+roots:
+  node: frontend
+  java: backend
+
+capabilities:
+  typescript: true
+  # The frontend currently has no automated suite.  Backend JUnit and the
+  # repository-owned converter regression tests are gated separately below.
+  tests: not-applicable
+  build: required
+  container: false
+
+profile:
+  type: tool
+  risk: elevated
+
+coverage:
+  newCodeMinimum: 0
+
+megalinter:
+  version: v9.4.0
+  osvScannerVersion: v2.2.3
+
+standards:
+  ref: standards-v1.0.8

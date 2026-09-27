@@ -1,41 +1,35 @@
-import React from 'react'
+import React from 'react';
 
 interface MetricCardProps {
-  title: string
-  value: string | number
-  rating?: 'A' | 'B' | 'C' | 'D' | 'E'
-  trend?: 'up' | 'down' | 'stable'
-  color?: string
+  title: string;
+  value: string | number;
+  rating?: 'A' | 'B' | 'C' | 'D' | 'E';
+  trend?: 'up' | 'down' | 'stable';
+  color?: string;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({
-  title,
-  value,
-  rating,
-  trend,
-  color
-}) => {
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, rating, trend, color }) => {
   const ratingColors: Record<string, string> = {
     A: 'var(--cq-green)',
     B: 'var(--cq-blue)',
     C: 'var(--cq-amber)',
     D: 'var(--cq-red)',
     E: 'var(--cq-red-deep)',
-  }
+  };
 
   const trendIcon = {
     up: '▲',
     down: '▼',
-    stable: '●'
-  }
+    stable: '●',
+  };
 
   const trendColor = {
     up: 'var(--cq-green)',
     down: 'var(--cq-red)',
     stable: 'var(--cq-violet)',
-  }
+  };
 
-  const accent = color || (rating ? ratingColors[rating] : undefined)
+  const accent = color || (rating ? ratingColors[rating] : undefined);
 
   return (
     <div
@@ -57,7 +51,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default MetricCard
+export default MetricCard;

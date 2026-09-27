@@ -1,6 +1,6 @@
-import axios from 'axios'
+import axios from 'axios';
 
-const API_BASE = '/api'
+const API_BASE = '/api';
 
 export async function fetchQualityMetrics(componentKey: string): Promise<any[]> {
   try {
@@ -19,13 +19,13 @@ export async function fetchQualityMetrics(componentKey: string): Promise<any[]> 
           'major_violations',
           'minor_violations',
           'info_violations',
-        ].join(',')
-      }
-    })
-    return response.data.component?.measures || []
+        ].join(','),
+      },
+    });
+    return response.data.component?.measures || [];
   } catch (error) {
-    console.error('Failed to fetch quality metrics:', error)
-    return []
+    console.error('Failed to fetch quality metrics:', error);
+    return [];
   }
 }
 
@@ -36,23 +36,26 @@ export async function fetchQualityHistory(componentKey: string): Promise<any[]> 
         component: componentKey,
         metrics: 'coverage,mutation_score',
         from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      }
-    })
-    return response.data.measures || []
+      },
+    });
+    return response.data.measures || [];
   } catch (error) {
-    console.error('Failed to fetch quality history:', error)
-    return []
+    console.error('Failed to fetch quality history:', error);
+    return [];
   }
 }
 
-export async function fetchMutationSummary(projectKey: string, branch: string = 'main'): Promise<any> {
+export async function fetchMutationSummary(
+  projectKey: string,
+  branch: string = 'main',
+): Promise<any> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
-      params: { projectKey, branch }
-    })
-    const data = response.data
+      params: { projectKey, branch },
+    });
+    const data = response.data;
     if (!data || data.hasReport === false) {
-      return null
+      return null;
     }
     // Backend field names (mutationScore, totalMutants, killedMutants, ...)
     // don't match what MutationTesting.tsx expects (score, total, killed,
@@ -68,21 +71,24 @@ export async function fetchMutationSummary(projectKey: string, branch: string = 
       ignored: data.ignoredMutants,
       tool: data.tool,
       language: data.language,
-    }
+    };
   } catch (error) {
-    console.error('Failed to fetch mutation summary:', error)
-    return null
+    console.error('Failed to fetch mutation summary:', error);
+    return null;
   }
 }
 
-export async function fetchMutationReport(projectKey: string, branch: string = 'main'): Promise<any> {
+export async function fetchMutationReport(
+  projectKey: string,
+  branch: string = 'main',
+): Promise<any> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/download`, {
-      params: { projectKey, branch }
-    })
-    return response.data
+      params: { projectKey, branch },
+    });
+    return response.data;
   } catch (error) {
-    console.error('Failed to fetch mutation report:', error)
-    return null
+    console.error('Failed to fetch mutation report:', error);
+    return null;
   }
 }

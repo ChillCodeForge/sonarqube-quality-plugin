@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // SonarQube loads each page-extension .js file as a plain classic <script>
 // (not type="module"), and each bundle MUST be self-contained - see
@@ -11,9 +11,9 @@ import path from 'path'
 // IIFE format with no code-splitting: build each page as its own fully
 // self-contained bundle via separate library-mode invocations, selected by
 // the PAGE env var (see package.json build script).
-const page = process.env.PAGE
+const page = process.env.PAGE;
 if (!page) {
-  throw new Error('Set PAGE=quality_dashboard|mutation_testing before building')
+  throw new Error('Set PAGE=quality_dashboard|mutation_testing before building');
 }
 
 export default defineConfig({
@@ -67,4 +67,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

@@ -2,17 +2,18 @@
 set -Eeuo pipefail
 
 # Upload mutation testing report to SonarQube ChillCode Quality Plugin
-# Usage: upload-mutation-report.sh <project-key> <branch> <commit> <normalized-report.json.gz> [sonar-url] [sonar-token]
+# Usage: MUTATION_UPLOAD_TOKEN=... upload-mutation-report.sh <project-key> <branch> <commit> <normalized-report.json.gz> [sonar-url]
 
 PROJECT_KEY="${1:-}"
 BRANCH="${2:-main}"
 COMMIT="${3:-$(git rev-parse HEAD)}"
 REPORT_FILE="${4:-}"
 SONAR_URL="${5:-https://sonar.chillcode.de}"
-SONAR_TOKEN="${6:-}"
+MUTATION_UPLOAD_TOKEN="${MUTATION_UPLOAD_TOKEN:-}"
+SONAR_TOKEN="${SONAR_TOKEN:-}"
 
 if [ -z "$PROJECT_KEY" ] || [ -z "$REPORT_FILE" ]; then
-  echo "Usage: $0 <project-key> <branch> <commit> <normalized-report.json.gz> [sonar-url] [sonar-token]"
+  echo "Usage: $0 <project-key> <branch> <commit> <normalized-report.json.gz> [sonar-url]"
   exit 1
 fi
 
@@ -21,8 +22,8 @@ if [ ! -f "$REPORT_FILE" ]; then
   exit 1
 fi
 
-if [ -z "$SONAR_TOKEN" ]; then
-  echo "SONAR_TOKEN not provided"
+if [ -z "$MUTATION_UPLOAD_TOKEN" ]; then
+  echo "MUTATION_UPLOAD_TOKEN is not provided"
   exit 1
 fi
 
@@ -39,7 +40,7 @@ echo "  Report: $REPORT_FILE"
 # server with a NullPointerException.
 UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X POST \
-  -H "Authorization: Bearer $SONAR_TOKEN" \
+  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
   -F "report=@${REPORT_FILE};type=application/gzip" \
   "$SONAR_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=$BRANCH&commit=$COMMIT")
 
@@ -56,7 +57,7 @@ else
 fi
 
 # Also push measures via SonarScanner if running in CI
-if [ -n "${CI:-}" ] && command -v sonar-scanner >/dev/null 2>&1; then
+if [ -n "${CI:-}" ] && [ -n "$SONAR_TOKEN" ] && command -v sonar-scanner >/dev/null 2>&1; then
   echo "Running SonarScanner to push measures..."
   # Extract key metrics from report for SonarScanner
   REPORT_JSON=$(zcat "$REPORT_FILE")
