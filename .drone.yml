@@ -98,20 +98,24 @@ steps:
         install -m 600 .ci/infra-swarm-known_hosts ~/.ssh/known_hosts
         artifact_sha=$$(sha256sum "$${artifact}" | awk '{print $$1}')
         test -n "$${MUTATION_UPLOAD_TOKEN}"
-        if ! ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 \
+        if ! ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 omarchy@192.168.178.30 \
           'sudo -n docker secret inspect sonarqube_mutation_upload_token >/dev/null 2>&1'; then
           printf '%s' "$${MUTATION_UPLOAD_TOKEN}" \
-            | ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 \
+            | ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 omarchy@192.168.178.30 \
               'sudo -n docker secret create sonarqube_mutation_upload_token - >/dev/null'
         fi
-        scp -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 "$${artifact}" ansible@192.168.178.30:/tmp/sonarqube-quality-plugin.jar
-        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 ansible@192.168.178.30 "sh -s -- $${artifact_sha}" <<'REMOTE'
+        stage_dir=/home/omarchy/.cache/sonarqube-plugin-deploy
+        candidate="$${stage_dir}/candidate.jar"
+        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 omarchy@192.168.178.30 \
+          "install -d -m 700 '$${stage_dir}' && rm -f '$${candidate}'"
+        scp -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 "$${artifact}" omarchy@192.168.178.30:"$${candidate}"
+        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 omarchy@192.168.178.30 "sh -s -- $${artifact_sha}" <<'REMOTE'
           set -eu
           expected_sha="$$1"
           plugin_dir=/mnt/docker/volume/sonarqube/plugins
           target="$$plugin_dir/sonarqube-quality-plugin-1.0.0-SNAPSHOT.jar"
           backup="$${target}.previous"
-          candidate=/tmp/sonarqube-quality-plugin.jar
+          candidate=/home/omarchy/.cache/sonarqube-plugin-deploy/candidate.jar
           succeeded=false
           mutation_started=false
           target_existed=false
@@ -166,17 +170,17 @@ steps:
             if [ "$$target_existed" = true ]; then
               sudo -n install -o ansible -g ansible -m 0644 "$$backup" "$$target"
               force_rollout
-              test "$$(sha256sum "$$target" | awk '{print $$1}')" = "$$previous_sha"
+              test "$$(sudo -n sha256sum "$$target" | awk '{print $$1}')" = "$$previous_sha"
             else
               sudo -n rm -f "$$target"
               force_rollout
             fi
           }
           test "$$(sha256sum "$$candidate" | awk '{print $$1}')" = "$$expected_sha"
-          if [ -f "$$target" ]; then
+          if sudo -n test -f "$$target"; then
             target_existed=true
-            cp "$$target" "$$backup"
-            previous_sha=$$(sha256sum "$$backup" | awk '{print $$1}')
+            sudo -n cp "$$target" "$$backup"
+            previous_sha=$$(sudo -n sha256sum "$$backup" | awk '{print $$1}')
           else
             previous_sha=''
           fi
@@ -185,9 +189,9 @@ steps:
           sudo -n install -o ansible -g ansible -m 0644 "$$candidate" "$$target"
           rm -f "$$candidate"
           force_rollout
-          test "$$(sha256sum "$$target" | awk '{print $$1}')" = "$$expected_sha"
+          test "$$(sudo -n sha256sum "$$target" | awk '{print $$1}')" = "$$expected_sha"
           succeeded=true
-          rm -f "$$backup"
+          sudo -n rm -f "$$backup"
         REMOTE
     depends_on:
       - sonarqube-analysis
