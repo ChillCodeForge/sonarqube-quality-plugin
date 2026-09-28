@@ -56,16 +56,22 @@ force_rollout() {
 wait_for_rollout() {
   prior_tasks="$1"
   deadline=$(($(date +%s) + 300))
+  sleep 3
   while :; do
     current_tasks=$(running_tasks)
     update_state=$(docker service inspect --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' sonarqube_sonarqube-app)
-    if [ "$update_state" = completed ] && [ -n "$current_tasks" ]; then
-      if has_prior_running_task "$prior_tasks" "$current_tasks"; then
-        :
-      elif curl -fsS http://127.0.0.1:9000/api/system/status >/dev/null; then
-        return 0
-      fi
-    fi
+    case "$update_state" in
+      rollback_*)
+        return 1
+        ;;
+      completed)
+        if [ -n "$current_tasks" ] && ! has_prior_running_task "$prior_tasks" "$current_tasks"; then
+          if curl -fsS https://sonar.chillcode.de/api/system/status 2>/dev/null | grep -Fq '"status":"UP"'; then
+            return 0
+          fi
+        fi
+        ;;
+    esac
     [ $(date +%s) -lt $deadline ] || return 1
     sleep 5
   done

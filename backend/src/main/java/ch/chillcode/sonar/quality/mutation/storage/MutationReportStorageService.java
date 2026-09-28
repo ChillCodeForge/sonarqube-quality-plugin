@@ -11,9 +11,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import org.sonar.api.config.Configuration;
+import org.sonar.api.server.ServerSide;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
 
+@ServerSide
 public class MutationReportStorageService {
 
   private static final Logger LOG = Loggers.get(MutationReportStorageService.class);

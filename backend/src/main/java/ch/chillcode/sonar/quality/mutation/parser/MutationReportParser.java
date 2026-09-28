@@ -18,12 +18,14 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import org.sonar.api.server.ServerSide;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+@ServerSide
 public class MutationReportParser {
 
   private static final Logger LOG = Loggers.get(MutationReportParser.class);
