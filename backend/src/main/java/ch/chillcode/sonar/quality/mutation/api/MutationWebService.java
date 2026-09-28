@@ -22,6 +22,20 @@ public class MutationWebService implements WebService {
 
   static final Path UPLOAD_TOKEN_FILE = Path.of("/run/secrets/chillcode_mutation_upload_token");
 
+  // API parameter names and the response property keys this service emits;
+  // constants keep the web-service description and the JSON responses in sync.
+  static final String PARAM_PROJECT_KEY = "projectKey";
+  static final String PARAM_BRANCH = "branch";
+  static final String PARAM_REPORT = "report";
+  static final String DESC_PROJECT_KEY = "SonarQube project key";
+  static final String DESC_BRANCH = "Branch name (default: main)";
+  static final String PROP_STATUS = "status";
+  static final String PROP_PROJECT_KEY = "projectKey";
+  static final String PROP_BRANCH = "branch";
+  static final String PROP_HAS_REPORT = "hasReport";
+  static final String PROP_MUTATION_SCORE = "mutationScore";
+  static final String PROP_TOTAL_MUTANTS = "totalMutants";
+
   private final MutationReportParser parser;
   private final MutationReportStorageService storage;
   private final String uploadToken;
@@ -49,18 +63,12 @@ public class MutationWebService implements WebService {
             .setPost(true)
             .setHandler(this::handleUpload);
 
-    uploadAction
-        .createParam("projectKey")
-        .setRequired(true)
-        .setDescription("SonarQube project key");
+    uploadAction.createParam(PARAM_PROJECT_KEY).setRequired(true).setDescription(DESC_PROJECT_KEY);
+
+    uploadAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     uploadAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
-
-    uploadAction
-        .createParam("report")
+        .createParam(PARAM_REPORT)
         .setRequired(true)
         .setDescription("Mutation report JSON (gzipped)");
 
@@ -74,14 +82,11 @@ public class MutationWebService implements WebService {
             .setHandler(this::handleDownload);
 
     downloadAction
-        .createParam("projectKey")
+        .createParam(PARAM_PROJECT_KEY)
         .setRequired(true)
-        .setDescription("SonarQube project key");
+        .setDescription(DESC_PROJECT_KEY);
 
-    downloadAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
+    downloadAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     // Summary (lightweight)
     NewAction summaryAction =
@@ -92,15 +97,9 @@ public class MutationWebService implements WebService {
             .setResponseExample(example("summary.json"))
             .setHandler(this::handleSummary);
 
-    summaryAction
-        .createParam("projectKey")
-        .setRequired(true)
-        .setDescription("SonarQube project key");
+    summaryAction.createParam(PARAM_PROJECT_KEY).setRequired(true).setDescription(DESC_PROJECT_KEY);
 
-    summaryAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
+    summaryAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     // Status check
     NewAction statusAction =
@@ -111,15 +110,9 @@ public class MutationWebService implements WebService {
             .setResponseExample(example("status.json"))
             .setHandler(this::handleStatus);
 
-    statusAction
-        .createParam("projectKey")
-        .setRequired(true)
-        .setDescription("SonarQube project key");
+    statusAction.createParam(PARAM_PROJECT_KEY).setRequired(true).setDescription(DESC_PROJECT_KEY);
 
-    statusAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
+    statusAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     // Delete report (cleanup)
     NewAction deleteAction =
@@ -130,15 +123,9 @@ public class MutationWebService implements WebService {
             .setPost(true)
             .setHandler(this::handleDelete);
 
-    deleteAction
-        .createParam("projectKey")
-        .setRequired(true)
-        .setDescription("SonarQube project key");
+    deleteAction.createParam(PARAM_PROJECT_KEY).setRequired(true).setDescription(DESC_PROJECT_KEY);
 
-    deleteAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
+    deleteAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     // SVG badge (shields.io style) - SonarQube's own project badge
     // endpoint only accepts a fixed whitelist of core metrics and
@@ -153,12 +140,9 @@ public class MutationWebService implements WebService {
             .setResponseExample(example("badge.svg"))
             .setHandler(this::handleBadge);
 
-    badgeAction.createParam("projectKey").setRequired(true).setDescription("SonarQube project key");
+    badgeAction.createParam(PARAM_PROJECT_KEY).setRequired(true).setDescription(DESC_PROJECT_KEY);
 
-    badgeAction
-        .createParam("branch")
-        .setRequired(false)
-        .setDescription("Branch name (default: main)");
+    badgeAction.createParam(PARAM_BRANCH).setRequired(false).setDescription(DESC_BRANCH);
 
     controller.done();
   }
@@ -266,11 +250,11 @@ public class MutationWebService implements WebService {
 
       try (JsonWriter json = response.newJsonWriter()) {
         json.beginObject()
-            .prop("status", "ok")
-            .prop("projectKey", projectKey)
-            .prop("branch", branch)
-            .prop("mutationScore", report.getSummary().getScore())
-            .prop("totalMutants", report.getSummary().getTotal())
+            .prop(PROP_STATUS, "ok")
+            .prop(PROP_PROJECT_KEY, projectKey)
+            .prop(PROP_BRANCH, branch)
+            .prop(PROP_MUTATION_SCORE, report.getSummary().getScore())
+            .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
             .endObject();
       }
     } catch (IOException e) {
@@ -314,18 +298,18 @@ public class MutationWebService implements WebService {
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
     if (report == null) {
       try (JsonWriter json = response.newJsonWriter()) {
-        json.beginObject().prop("hasReport", false).endObject();
+        json.beginObject().prop(PROP_HAS_REPORT, false).endObject();
       }
       return;
     }
 
     try (JsonWriter json = response.newJsonWriter()) {
       json.beginObject()
-          .prop("hasReport", true)
-          .prop("projectKey", projectKey)
-          .prop("branch", branch)
-          .prop("mutationScore", report.getSummary().getScore())
-          .prop("totalMutants", report.getSummary().getTotal())
+          .prop(PROP_HAS_REPORT, true)
+          .prop(PROP_PROJECT_KEY, projectKey)
+          .prop(PROP_BRANCH, branch)
+          .prop(PROP_MUTATION_SCORE, report.getSummary().getScore())
+          .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
           .prop("killedMutants", report.getSummary().getKilled())
           .prop("survivedMutants", report.getSummary().getSurvived())
           .prop("noCoverageMutants", report.getSummary().getNoCoverage())
@@ -351,12 +335,12 @@ public class MutationWebService implements WebService {
 
     try (JsonWriter json = response.newJsonWriter()) {
       json.beginObject()
-          .prop("projectKey", projectKey)
-          .prop("branch", branch)
-          .prop("hasReport", report != null);
+          .prop(PROP_PROJECT_KEY, projectKey)
+          .prop(PROP_BRANCH, branch)
+          .prop(PROP_HAS_REPORT, report != null);
       if (report != null) {
-        json.prop("mutationScore", report.getSummary().getScore())
-            .prop("totalMutants", report.getSummary().getTotal());
+        json.prop(PROP_MUTATION_SCORE, report.getSummary().getScore())
+            .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal());
       }
       json.endObject();
     }
@@ -376,9 +360,9 @@ public class MutationWebService implements WebService {
 
     try (JsonWriter json = response.newJsonWriter()) {
       json.beginObject()
-          .prop("status", "deleted")
-          .prop("projectKey", projectKey)
-          .prop("branch", branch)
+          .prop(PROP_STATUS, "deleted")
+          .prop(PROP_PROJECT_KEY, projectKey)
+          .prop(PROP_BRANCH, branch)
           .endObject();
     }
   }
