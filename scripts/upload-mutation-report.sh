@@ -38,9 +38,12 @@ echo "  Report: $REPORT_FILE"
 # multipart part by name, not the raw request body); sending the gzip as
 # --data-binary silently leaves the "report" param unset and crashes the
 # server with a NullPointerException.
-UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+#
+# The header arrives on stdin (`-H @-`) rather than as an argument, because
+# every argument is readable by any local user in the process list.
+UPLOAD_RESPONSE=$(printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl -s -w "\n%{http_code}" \
   -X POST \
-  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
+  -H @- \
   -F "report=@${REPORT_FILE};type=application/gzip" \
   "$SONAR_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=$BRANCH&commit=$COMMIT")
 
@@ -71,9 +74,11 @@ if [ -n "${CI:-}" ] && [ -n "$SONAR_TOKEN" ] && command -v sonar-scanner >/dev/n
   TOOL=$(echo "$REPORT_JSON" | jq -r '.tool')
   LANGUAGE=$(echo "$REPORT_JSON" | jq -r '.language')
 
+  # The scanner reads SONAR_TOKEN from the environment; passing it as
+  # -Dsonar.token would put it in the process list.
+  export SONAR_TOKEN
   sonar-scanner \
     -Dsonar.host.url="$SONAR_URL" \
-    -Dsonar.token="$SONAR_TOKEN" \
     -Dsonar.projectKey="$PROJECT_KEY" \
     -Dsonar.chillcode.mutationScore="$SCORE" \
     -Dsonar.chillcode.mutationTotal="$TOTAL" \

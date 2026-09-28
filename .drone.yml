@@ -47,9 +47,9 @@ steps:
       - |
         set -eu
         test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
+        # SONAR_TOKEN is read from the environment; -Dsonar.token would put it in the process list.
         sonar-scanner \
           -Dsonar.host.url="$${SONAR_HOST_URL}" \
-          -Dsonar.token="$${SONAR_TOKEN}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
           -Dsonar.projectName='SonarQube Quality Plugin' \
           -Dsonar.sources=backend/src/main/java,frontend/src,scripts \

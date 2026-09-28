@@ -73,10 +73,12 @@ class NormalizeMutationReportTest(unittest.TestCase):
                 output.write('{"summary": {"score": 100}}')
 
             arguments_file = temporary_root / "curl-arguments.txt"
+            stdin_file = temporary_root / "curl-stdin.txt"
             fake_curl = temporary_root / "curl"
             fake_curl.write_text(
                 "#!/usr/bin/env sh\n"
                 "printf '%s\\n' \"$@\" > \"$CAPTURED_CURL_ARGUMENTS\"\n"
+                "cat > \"$CAPTURED_CURL_STDIN\"\n"
                 "printf '{\\\"status\\\":\\\"ok\\\"}\\n200\\n'\n",
                 encoding="utf-8",
             )
@@ -85,6 +87,7 @@ class NormalizeMutationReportTest(unittest.TestCase):
             environment = os.environ | {
                 "PATH": f"{temporary_root}:{os.environ['PATH']}",
                 "CAPTURED_CURL_ARGUMENTS": str(arguments_file),
+                "CAPTURED_CURL_STDIN": str(stdin_file),
                 "MUTATION_UPLOAD_TOKEN": "test-mutation-upload-token",
             }
             subprocess.run(
@@ -104,8 +107,13 @@ class NormalizeMutationReportTest(unittest.TestCase):
             )
 
             arguments = arguments_file.read_text(encoding="utf-8").splitlines()
+            headers = stdin_file.read_text(encoding="utf-8").splitlines()
 
-        self.assertIn("Authorization: Bearer test-mutation-upload-token", arguments)
+        # The header reaches curl on stdin, never as an argument, because any
+        # local user can read a process's arguments.
+        self.assertIn("Authorization: Bearer test-mutation-upload-token", headers)
+        self.assertIn("@-", arguments)
+        self.assertFalse(any("test-mutation-upload-token" in argument for argument in arguments))
         self.assertIn("report=@%s;type=application/gzip" % report_file, arguments)
 
 

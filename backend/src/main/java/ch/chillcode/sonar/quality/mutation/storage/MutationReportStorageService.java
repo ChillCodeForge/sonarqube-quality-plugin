@@ -170,8 +170,18 @@ public class MutationReportStorageService {
     }
   }
 
-  private String sanitize(String input) {
+  /**
+   * The one path segment a project key or branch becomes: characters outside SonarQube's key
+   * alphabet turn into {@code _}. A segment made only of dots is refused, because {@code .} and
+   * {@code ..} pass that replacement unchanged and would resolve outside the storage root. The
+   * refusal is an {@link IllegalArgumentException}, which the web service engine answers with 400.
+   */
+  static String sanitize(String input) {
     if (input == null) return "unknown";
-    return input.replaceAll("[^a-zA-Z0-9._-]", "_");
+    String segment = input.replaceAll("[^a-zA-Z0-9._-]", "_");
+    if (segment.isEmpty() || segment.chars().allMatch(c -> c == '.')) {
+      throw new IllegalArgumentException("Invalid project key or branch: " + segment);
+    }
+    return segment;
   }
 }

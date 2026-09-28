@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.zip.GZIPInputStream;
+import org.sonar.api.server.ws.LocalConnector;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
@@ -153,20 +154,45 @@ public class MutationWebService implements WebService {
 
   private boolean authorizeMutationWrite(Request request, Response response) throws IOException {
     if (uploadToken == null || uploadToken.isBlank()) {
-      response.stream()
-          .setStatus(503)
-          .output()
-          .write("Mutation upload is not configured".getBytes());
+      writeText(response, 503, "Mutation upload is not configured");
       return false;
     }
     String provided = request.header("Authorization").orElse("");
     String expected = "Bearer " + uploadToken;
     if (!MessageDigest.isEqual(
         expected.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8))) {
-      response.stream().setStatus(403).output().write("Forbidden".getBytes());
+      writeText(response, 403, "Forbidden");
       return false;
     }
     return true;
+  }
+
+  /**
+   * Whether the caller may browse {@code projectKey}, answered by SonarQube's own permission model
+   * through the local connector. A report names every surviving mutant with its file and line, so
+   * it is as private as the project's source. A refusal answers 404, the same as a project with no
+   * report, so the endpoint does not say which private projects exist.
+   */
+  static boolean authorizeProjectRead(
+      LocalConnector connector, Response response, String projectKey) throws IOException {
+    int status = connector.call(new ComponentShowRequest(projectKey)).getStatus();
+    if (status == 200) {
+      return true;
+    }
+    writeText(response, 404, "Not Found");
+    return false;
+  }
+
+  /**
+   * A plain-text answer. The media type is set explicitly because some messages echo parser errors
+   * that quote the uploaded body, and a browser must never sniff one as HTML.
+   */
+  static void writeText(Response response, int status, String message) throws IOException {
+    response.stream()
+        .setMediaType("text/plain")
+        .setStatus(status)
+        .output()
+        .write(message.getBytes(StandardCharsets.UTF_8));
   }
 
   static String readUploadToken(Path tokenFile) {
@@ -229,15 +255,15 @@ public class MutationWebService implements WebService {
             .endObject();
       }
     } catch (IOException e) {
-      response.stream()
-          .setStatus(400)
-          .output()
-          .write(("Bad Request: " + e.getMessage()).getBytes());
+      writeText(response, 400, "Bad Request: " + e.getMessage());
     }
   }
 
   private void handleDownload(Request request, Response response) throws Exception {
     String projectKey = request.mandatoryParam("projectKey");
+    if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
+      return;
+    }
     String branch = request.param("branch");
     if (branch == null || branch.isEmpty()) {
       branch = "main";
@@ -245,7 +271,7 @@ public class MutationWebService implements WebService {
 
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
     if (report == null) {
-      response.stream().setStatus(404).output().write("Not Found".getBytes());
+      writeText(response, 404, "Not Found");
       return;
     }
 
@@ -258,6 +284,9 @@ public class MutationWebService implements WebService {
 
   private void handleSummary(Request request, Response response) throws Exception {
     String projectKey = request.mandatoryParam("projectKey");
+    if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
+      return;
+    }
     String branch = request.param("branch");
     if (branch == null || branch.isEmpty()) {
       branch = "main";
@@ -291,6 +320,9 @@ public class MutationWebService implements WebService {
 
   private void handleStatus(Request request, Response response) throws Exception {
     String projectKey = request.mandatoryParam("projectKey");
+    if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
+      return;
+    }
     String branch = request.param("branch");
     if (branch == null || branch.isEmpty()) {
       branch = "main";

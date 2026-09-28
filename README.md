@@ -46,13 +46,13 @@ The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are st
 
 ## CI upload
 
-The upload API expects a gzip-compressed report in a multipart form field named `report` and a `MUTATION_UPLOAD_TOKEN` bearer credential. Production reads that token from the Docker Swarm secret mounted at `/run/secrets/chillcode_mutation_upload_token`; inject the same value into CI as the `MUTATION_UPLOAD_TOKEN` secret. It is distinct from an optional `SONAR_TOKEN`, which is used only when the helper also runs SonarScanner. Never pass either token on a command line or commit it.
+The upload API expects a gzip-compressed report in a multipart form field named `report` and a `MUTATION_UPLOAD_TOKEN` bearer credential. Production reads that token from the Docker Swarm secret mounted at `/run/secrets/chillcode_mutation_upload_token`; inject the same value into CI as the `MUTATION_UPLOAD_TOKEN` secret. It is distinct from an optional `SONAR_TOKEN`, which is used only when the helper also runs SonarScanner. Never pass either token on a command line or commit it: the examples below hand the header to curl on stdin (`-H @-`), because any local user can read a command line from the process list.
 
 The Swarm secret is immutable. Rotate it by creating a new secret name, updating the SonarQube service with `--secret-rm` and `--secret-add` targeting `chillcode_mutation_upload_token`, verifying the rollout and authenticated upload, then deleting the old secret. Update the Drone `mutation_upload_token` secret before that controlled rotation; the normal deploy deliberately refuses an empty value and never overwrites an existing Swarm secret.
 
 ```bash
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --silent --show-error -X POST \
+  -H @- \
   -F "report=@report.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -65,8 +65,8 @@ A successful upload stores the report. A subsequent SonarQube analysis of that p
 
 ```bash
 gzip -c reports/mutation/mutation.json > /tmp/stryker-mutation.json.gz
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --silent --show-error -X POST \
+  -H @- \
   -F "report=@/tmp/stryker-mutation.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -75,8 +75,8 @@ curl --fail --silent --show-error -X POST \
 
 ```bash
 gzip -c target/pit-reports/mutations.xml > /tmp/pitest-mutations.xml.gz
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --silent --show-error -X POST \
+  -H @- \
   -F "report=@/tmp/pitest-mutations.xml.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -86,8 +86,8 @@ curl --fail --silent --show-error -X POST \
 ```bash
 python3 scripts/mutmut_to_stryker.py mutants . "$PROJECT_KEY" > /tmp/mutmut-stryker.json
 gzip -c /tmp/mutmut-stryker.json > /tmp/mutmut-stryker.json.gz
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MUTATION_UPLOAD_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --silent --show-error -X POST \
+  -H @- \
   -F "report=@/tmp/mutmut-stryker.json.gz;type=application/gzip" \
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
@@ -123,7 +123,7 @@ MUTATION_UPLOAD_TOKEN="$MUTATION_UPLOAD_TOKEN" ./scripts/upload-mutation-report.
 | `POST /api/chillcode_mutation/delete?projectKey={key}&branch={branch}` | Delete the stored report for a project/branch. Requires `Authorization: Bearer $MUTATION_UPLOAD_TOKEN`. |
 | `GET /api/chillcode_mutation/badge?projectKey={key}&branch={branch}` | Return a mutation-score SVG badge. |
 
-`branch` defaults to `main` when omitted.
+`branch` defaults to `main` when omitted. `download`, `summary` and `status` answer 404 unless the caller may browse the project in SonarQube; `badge` stays public so a README can embed it.
 
 ## Quality gate
 
