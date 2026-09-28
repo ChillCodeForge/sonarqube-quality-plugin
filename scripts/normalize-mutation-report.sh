@@ -10,10 +10,12 @@ set -Eeuo pipefail
 # Inputs:
 #   stryker  path to Stryker mutation.json
 #   pitest   path to PITest mutations.xml
+#   cargo-mutants  path to cargo-mutants' mutants.out/outcomes.json
 #   mutmut   path to mutmut's mutants/ directory; source-root is required
 #
-# Stryker JSON and PITest XML are already accepted directly by the plugin's
-# upload endpoint, so this wrapper only compresses them. mutmut needs the
+# Stryker JSON, PITest XML and cargo-mutants' outcomes.json are already
+# accepted directly by the plugin's upload endpoint, so this wrapper only
+# compresses them. mutmut needs the
 # bundled Python converter because its raw artifacts are not a stable upload
 # format for the plugin.
 
@@ -34,7 +36,7 @@ fi
 PROJECT_KEY="${PROJECT_KEY:-$(basename "$(git rev-parse --show-toplevel)")}"
 
 case "$TOOL" in
-  stryker|pitest)
+  stryker|pitest|cargo-mutants)
     if [[ ! -f "$INPUT_PATH" ]]; then
       echo "Input file not found: $INPUT_PATH" >&2
       exit 1
@@ -55,7 +57,7 @@ case "$TOOL" in
       | gzip -c > "${OUTPUT_FILE}.gz"
     ;;
   *)
-    echo "Unknown tool: $TOOL (supported: stryker, pitest, mutmut)" >&2
+    echo "Unknown tool: $TOOL (supported: stryker, pitest, cargo-mutants, mutmut)" >&2
     exit 2
     ;;
 esac

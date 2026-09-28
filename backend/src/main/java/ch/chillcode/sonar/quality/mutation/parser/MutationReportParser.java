@@ -111,6 +111,9 @@ public class MutationReportParser {
     if (root.has("schemaVersion") && root.has("files")) {
       return parseStryker(root);
     }
+    if (CargoMutantsParser.accepts(root)) {
+      return CargoMutantsParser.parse(root);
+    }
     // Mutmut format detection
     if (root.has("mutants")) {
       return parseMutmut(root);
