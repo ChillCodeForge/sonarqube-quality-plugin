@@ -53,8 +53,7 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
     return (
       <div className="cq-root">
         <div className="cq-loading">
-          <span className="cq-spinner" />
-          Loading quality dashboard…
+          <span className="cq-spinner" /> Loading quality dashboard…
         </div>
       </div>
     );

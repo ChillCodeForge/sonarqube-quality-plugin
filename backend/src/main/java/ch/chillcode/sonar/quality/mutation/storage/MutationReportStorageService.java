@@ -23,13 +23,16 @@ public class MutationReportStorageService {
   private final ObjectMapper mapper;
   private long maxReportSize;
   private int prRetentionDays;
-  private Configuration config;
+
+  private static final String FILE_NAME = "current.json.gz";
+  private static final String DEFAULT_ROOT = "/opt/sonarqube/mutation-reports";
+  private static final long DEFAULT_MAX_REPORT_SIZE = 50L * 1024 * 1024; // 50MB
 
   public MutationReportStorageService() {
-    this.storageRoot = Path.of("/opt/sonarqube/mutation-reports");
+    this.storageRoot = Path.of(DEFAULT_ROOT);
     this.mapper = new ObjectMapper();
     this.mapper.registerModule(new JavaTimeModule());
-    this.maxReportSize = 50L * 1024 * 1024; // 50MB
+    this.maxReportSize = DEFAULT_MAX_REPORT_SIZE;
     this.prRetentionDays = 14;
   }
 
@@ -51,13 +54,10 @@ public class MutationReportStorageService {
   }
 
   public void setConfiguration(Configuration config) {
-    this.config = config;
     if (config != null) {
-      String root =
-          config.get("chillcode.mutation.storage").orElse("/opt/sonarqube/mutation-reports");
-      this.storageRoot = Path.of(root);
+      this.storageRoot = Path.of(config.get("chillcode.mutation.storage").orElse(DEFAULT_ROOT));
       this.maxReportSize =
-          config.getLong("chillcode.mutation.maxReportSize").orElse(50L * 1024 * 1024);
+          config.getLong("chillcode.mutation.maxReportSize").orElse(DEFAULT_MAX_REPORT_SIZE);
       this.prRetentionDays = config.getInt("chillcode.mutation.retention.prDays").orElse(14);
       ensureStorageDirectory();
     }
@@ -76,8 +76,8 @@ public class MutationReportStorageService {
     Files.createDirectories(projectDir);
 
     // Write to temp file first, then atomic rename
-    Path tempFile = projectDir.resolve("current.json.gz.tmp");
-    Path targetFile = projectDir.resolve("current.json.gz");
+    Path tempFile = projectDir.resolve(FILE_NAME + ".tmp");
+    Path targetFile = projectDir.resolve(FILE_NAME);
 
     try (GZIPOutputStream gos =
         new GZIPOutputStream(
@@ -107,10 +107,7 @@ public class MutationReportStorageService {
   public NormalizedMutationReport loadReport(String projectKey, String branch) throws IOException {
     ensureStorageDirectory();
     Path reportFile =
-        storageRoot
-            .resolve(sanitize(projectKey))
-            .resolve(sanitize(branch))
-            .resolve("current.json.gz");
+        storageRoot.resolve(sanitize(projectKey)).resolve(sanitize(branch)).resolve(FILE_NAME);
 
     if (!Files.exists(reportFile)) {
       return null;
@@ -124,7 +121,7 @@ public class MutationReportStorageService {
   public void deleteReport(String projectKey, String branch) throws IOException {
     ensureStorageDirectory();
     Path projectDir = storageRoot.resolve(sanitize(projectKey)).resolve(sanitize(branch));
-    Path reportFile = projectDir.resolve("current.json.gz");
+    Path reportFile = projectDir.resolve(FILE_NAME);
     Files.deleteIfExists(reportFile);
 
     // Clean up empty directories
@@ -140,7 +137,7 @@ public class MutationReportStorageService {
     try {
       Files.walk(storageRoot)
           .filter(Files::isRegularFile)
-          .filter(path -> path.getFileName().toString().equals("current.json.gz"))
+          .filter(path -> FILE_NAME.equals(path.getFileName().toString()))
           .forEach(this::checkAndDeleteOldPRReport);
     } catch (IOException e) {
       LOG.error("Failed to cleanup old PR reports", e);

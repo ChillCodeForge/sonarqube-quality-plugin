@@ -80,14 +80,13 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
     return (
       <div className="cq-root">
         <div className="cq-loading">
-          <span className="cq-spinner" />
-          Loading mutation testing results…
+          <span className="cq-spinner" /> Loading mutation testing results…
         </div>
       </div>
     );
   }
 
-  if (!summary || summary.score === undefined || summary.score === null) {
+  if (summary?.score == null) {
     return (
       <div className="cq-root">
         <div className="cq-empty">No mutation testing data available for this project</div>
@@ -267,9 +266,9 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
               </tr>
             </thead>
             <tbody>
-              {files.map((file, index) => (
+              {files.map((file) => (
                 <tr
-                  key={index}
+                  key={file.path}
                   onClick={() => setSelectedFile(file)}
                   className={selectedFile === file ? 'cq-selected' : ''}
                 >
