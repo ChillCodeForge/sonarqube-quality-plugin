@@ -131,6 +131,16 @@ steps:
             sudo -n docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' sonarqube_sonarqube-app \
               | grep -Fq 'CHILLCODE_MUTATION_UPLOAD_TOKEN='
           }
+          has_prior_running_task() {
+            current_tasks="$$2"
+            for task in $$1; do
+              [ -n "$$task" ] || continue
+              if printf '%s\n' "$$current_tasks" | grep -Fqx "$$task"; then
+                return 0
+              fi
+            done
+            return 1
+          }
           force_rollout() {
             if service_has_legacy_upload_token; then
               prior_tasks=$$(running_tasks)
@@ -153,11 +163,12 @@ steps:
             while :; do
               current_tasks=$$(running_tasks)
               update_state=$$(docker service inspect --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' sonarqube_sonarqube-app)
-              if [ "$$update_state" = completed ] \
-                && [ -n "$$current_tasks" ] \
-                && ! printf '%s\n' "$$current_tasks" | grep -Fqx "$$prior_tasks" \
-                && curl -fsS http://127.0.0.1:9000/api/system/status >/dev/null; then
-                return 0
+              if [ "$$update_state" = completed ] && [ -n "$$current_tasks" ]; then
+                if has_prior_running_task "$$prior_tasks" "$$current_tasks"; then
+                  :
+                elif curl -fsS http://127.0.0.1:9000/api/system/status >/dev/null; then
+                  return 0
+                fi
               fi
               [ $$(date +%s) -lt $$deadline ] || return 1
               sleep 5
