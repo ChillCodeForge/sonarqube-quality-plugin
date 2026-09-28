@@ -195,6 +195,11 @@
   box-shadow: var(--cq-shadow);
 }
 
+.cq-root .recharts-pie-label-text {
+  fill: var(--cq-text);
+  font-size: 11px;
+}
+
 .cq-root .cq-chart-card h2,
 .cq-root .cq-files-section h2 {
   margin: 0 0 14px;

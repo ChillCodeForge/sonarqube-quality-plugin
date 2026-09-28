@@ -185,12 +185,12 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
                     dataKey="value"
                     nameKey="name"
                     label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                    style={{ fill: 'var(--cq-text)', fontSize: 11 }}
                   >
                     {statusData.map((entry) => (
                       <Cell
                         key={`cell-${entry.name}`}
                         fill={entry.color}
+                        style={{ fill: entry.color }}
                         stroke="var(--cq-surface)"
                         strokeWidth={2}
                       />
