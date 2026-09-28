@@ -9,6 +9,7 @@ SonarQube plugin for mutation-testing data. It adds mutation metrics, a quality 
 | Stryker | Raw `mutation.json` | No. The plugin parses Stryker JSON directly. |
 | PITest | Raw `mutations.xml` | No. The plugin parses PITest XML directly. |
 | cargo-mutants | Raw `mutants.out/outcomes.json` | No. The plugin parses it directly; unviable mutants are left out of the score, as PITest's non-viable ones are. |
+| mutant (Ruby) 0.16+ | A session file from `.mutant/results/` | No. The plugin parses it directly; only `evil` mutations count, and locations are accurate at method granularity. |
 | mutmut 3.x | `mutants/` artifacts from `mutmut run` | Yes. Use the bundled `scripts/mutmut_to_stryker.py` converter or wrapper. |
 | Stryker-compatible JSON | JSON with `schemaVersion` and `files` | No. The plugin parses it directly. |
 
@@ -108,6 +109,18 @@ printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --sil
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
 
+### mutant (Ruby)
+
+mutant writes one session file per run; upload the newest.
+
+```bash
+gzip -c "$(ls -t .mutant/results/*.json | head -n 1)" > /tmp/mutant-session.json.gz
+printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --silent --show-error -X POST \
+  -H @- \
+  -F "report=@/tmp/mutant-session.json.gz;type=application/gzip" \
+  "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
+```
+
 ### mutmut
 
 ```bash
@@ -119,13 +132,14 @@ printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --sil
   "$SONAR_HOST_URL/api/chillcode_mutation/upload?projectKey=$PROJECT_KEY&branch=${DRONE_BRANCH:-main}"
 ```
 
-`scripts/normalize-mutation-report.sh` is a convenience wrapper. For Stryker, PITest and cargo-mutants it only gzip-compresses the native report; for mutmut it invokes the bundled Python converter. Its final optional argument is the source root used to map mutmut artifact paths back to real Python files.
+`scripts/normalize-mutation-report.sh` is a convenience wrapper. For Stryker, PITest, cargo-mutants and mutant it only gzip-compresses the native report; for mutmut it invokes the bundled Python converter. Its final optional argument is the source root used to map mutmut artifact paths back to real Python files.
 
 ```bash
-# Stryker, PITest or cargo-mutants
+# Stryker, PITest, cargo-mutants or mutant
 ./scripts/normalize-mutation-report.sh stryker reports/mutation/mutation.json /tmp/stryker
 ./scripts/normalize-mutation-report.sh pitest target/pit-reports/mutations.xml /tmp/pitest
 ./scripts/normalize-mutation-report.sh cargo-mutants mutants.out/outcomes.json /tmp/cargo-mutants
+./scripts/normalize-mutation-report.sh mutant "$(ls -t .mutant/results/*.json | head -n 1)" /tmp/mutant
 
 # mutmut: argument 7 is the source root
 ./scripts/normalize-mutation-report.sh mutmut mutants /tmp/mutmut \
@@ -146,7 +160,7 @@ The helper sends the commit as a `commit` query parameter, which the server igno
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}` | Store a gzip-compressed Stryker JSON, PITest XML, cargo-mutants outcomes, or normalized report. `report` is required multipart data. Requires `Authorization: Bearer $MUTATION_UPLOAD_TOKEN`. |
+| `POST /api/chillcode_mutation/upload?projectKey={key}&branch={branch}` | Store a gzip-compressed Stryker JSON, PITest XML, cargo-mutants outcomes, mutant session, or normalized report. `report` is required multipart data. Requires `Authorization: Bearer $MUTATION_UPLOAD_TOKEN`. |
 | `GET /api/chillcode_mutation/download?projectKey={key}&branch={branch}` | Return the stored normalized report. |
 | `GET /api/chillcode_mutation/summary?projectKey={key}&branch={branch}` | Return mutation score and aggregate counts. |
 | `GET /api/chillcode_mutation/status?projectKey={key}&branch={branch}` | Return whether a report exists and its basic score data. |

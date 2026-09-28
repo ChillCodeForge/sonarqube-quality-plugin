@@ -114,6 +114,9 @@ public class MutationReportParser {
     if (CargoMutantsParser.accepts(root)) {
       return CargoMutantsParser.parse(root);
     }
+    if (RubyMutantParser.accepts(root)) {
+      return RubyMutantParser.parse(root);
+    }
     // Mutmut format detection
     if (root.has("mutants")) {
       return parseMutmut(root);
