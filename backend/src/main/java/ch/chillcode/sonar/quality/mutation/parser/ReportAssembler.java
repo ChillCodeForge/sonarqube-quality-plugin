@@ -5,6 +5,7 @@ import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport.Mutati
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport.MutationMutant;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport.MutationSummary;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -32,7 +33,7 @@ final class ReportAssembler {
     report.setProject("unknown");
     report.setBranch("main");
     report.setCommit("");
-    report.setTimestamp(LocalDateTime.now());
+    report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
 
     Map<String, List<MutationMutant>> byFile = new LinkedHashMap<>();
     for (MutationMutant mutant : mutants) {

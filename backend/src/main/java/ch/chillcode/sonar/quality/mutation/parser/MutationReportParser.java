@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -136,7 +137,7 @@ public class MutationReportParser {
     report.setProject(root.path("projectName").asText("unknown"));
     report.setBranch(root.path("branch").asText("main"));
     report.setCommit(root.path("commit").asText(""));
-    report.setTimestamp(LocalDateTime.now());
+    report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
 
     NormalizedMutationReport.MutationSummary summary =
         new NormalizedMutationReport.MutationSummary();
@@ -323,7 +324,7 @@ public class MutationReportParser {
     report.setProject("unknown");
     report.setBranch("main");
     report.setCommit("");
-    report.setTimestamp(LocalDateTime.now());
+    report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
 
     int total = 0, killed = 0, survived = 0, noCoverage = 0, timeout = 0, ignored = 0;
     Map<String, List<NormalizedMutationReport.MutationMutant>> byFile = new HashMap<>();
