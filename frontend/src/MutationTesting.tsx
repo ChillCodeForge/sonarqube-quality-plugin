@@ -10,6 +10,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from 'recharts';
 import Gauge from './components/Gauge';
 import MetricCard from './components/MetricCard';
@@ -41,11 +42,11 @@ interface MutationTestingProps {
 }
 
 const COLORS = {
-  killed: 'var(--cq-green)',
-  survived: 'var(--cq-red)',
-  noCoverage: 'var(--cq-amber)',
-  timeout: 'var(--cq-violet)',
-  ignored: 'var(--cq-blue)',
+  killed: '#2ee6ac',
+  survived: '#ff5252',
+  noCoverage: '#ffb84d',
+  timeout: '#9a90ff',
+  ignored: '#5b9dff',
 };
 
 const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 'main' }) => {
@@ -145,45 +146,73 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
         <div className="cq-chart-card">
           <h2>Mutant Status Distribution</h2>
           <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'Killed', value: summary.killed },
-                  { name: 'Survived', value: summary.survived },
-                  { name: 'No Coverage', value: summary.noCoverage },
-                  { name: 'Timeout', value: summary.timeout },
-                  { name: 'Ignored', value: summary.ignored },
-                ]}
-                cx="50%"
-                cy="50%"
-                innerRadius={62}
-                outerRadius={98}
-                paddingAngle={2}
-                cornerRadius={6}
-                dataKey="value"
-                nameKey="name"
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                style={{ fill: 'var(--cq-text)' }}
-              >
-                {[
-                  COLORS.killed,
-                  COLORS.survived,
-                  COLORS.noCoverage,
-                  COLORS.timeout,
-                  COLORS.ignored,
-                ].map((color, i) => (
-                  <Cell key={`cell-${i}`} fill={color} stroke="var(--cq-surface)" strokeWidth={2} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 10,
-                  border: '1px solid var(--cq-border)',
-                  background: 'var(--cq-surface)',
-                  color: 'var(--cq-text)',
-                }}
-              />
-            </PieChart>
+            {(() => {
+              const statusData = [
+                { name: 'Killed', value: summary.killed, color: COLORS.killed },
+                { name: 'Survived', value: summary.survived, color: COLORS.survived },
+                { name: 'No Coverage', value: summary.noCoverage, color: COLORS.noCoverage },
+                { name: 'Timeout', value: summary.timeout, color: COLORS.timeout },
+                { name: 'Ignored', value: summary.ignored, color: COLORS.ignored },
+              ].filter((item) => item.value > 0);
+
+              if (statusData.length === 0) {
+                return (
+                  <div
+                    style={{
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--cq-text-muted)',
+                      fontSize: 13,
+                    }}
+                  >
+                    No mutant data available
+                  </div>
+                );
+              }
+
+              return (
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={statusData.length > 1 ? 3 : 0}
+                    cornerRadius={5}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                    style={{ fill: 'var(--cq-text)', fontSize: 11 }}
+                  >
+                    {statusData.map((entry) => (
+                      <Cell
+                        key={`cell-${entry.name}`}
+                        fill={entry.color}
+                        stroke="var(--cq-surface)"
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 10,
+                      border: '1px solid var(--cq-border)',
+                      background: 'var(--cq-surface)',
+                      color: 'var(--cq-text)',
+                    }}
+                    formatter={(value: number | string, name: string) => [`${value} Mutants`, name]}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
+                    wrapperStyle={{ paddingTop: 8, fontSize: 12, color: 'var(--cq-text-muted)' }}
+                  />
+                </PieChart>
+              );
+            })()}
           </ResponsiveContainer>
         </div>
 
