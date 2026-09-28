@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "tool": "cargo-mutants",
+  "language": "rust",
+  "project": "my-project",
+  "branch": "main",
+  "commit": "",
+  "timestamp": "2026-09-28T19:57:01",
+  "summary": {
+    "total": 2,
+    "killed": 1,
+    "survived": 1,
+    "noCoverage": 0,
+    "timeout": 0,
+    "ignored": 0,
+    "score": 50.0
+  },
+  "files": [
+    {
+      "path": "src/indexer.rs",
+      "language": "rust",
+      "metrics": {"score": 50.0, "total": 2, "killed": 1, "survived": 1, "noCoverage": 0, "timeout": 0, "ignored": 0},
+      "mutants": [
+        {
+          "id": "src/indexer.rs:61:5: replace == with !=",
+          "mutatorName": "BinaryOperator",
+          "replacement": "!=",
+          "status": "SURVIVED",
+          "statusReason": "MissedMutant",
+          "location": {"start": {"line": 61, "column": 5}, "end": {"line": 61, "column": 20}},
+          "filePath": "src/indexer.rs",
+          "coveredBy": []
+        }
+      ]
+    }
+  ],
+  "mutants": []
+}

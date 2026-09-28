@@ -6,6 +6,7 @@ import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,6 +45,7 @@ public class MutationWebService implements WebService {
         controller
             .createAction("upload")
             .setDescription("Upload normalized mutation report (JSON gzipped)")
+            .setSince("1.0")
             .setPost(true)
             .setHandler(this::handleUpload);
 
@@ -67,6 +69,8 @@ public class MutationWebService implements WebService {
         controller
             .createAction("download")
             .setDescription("Download current mutation report for project")
+            .setSince("1.0")
+            .setResponseExample(example("download.json"))
             .setHandler(this::handleDownload);
 
     downloadAction
@@ -84,6 +88,8 @@ public class MutationWebService implements WebService {
         controller
             .createAction("summary")
             .setDescription("Get mutation summary (score, counts)")
+            .setSince("1.0")
+            .setResponseExample(example("summary.json"))
             .setHandler(this::handleSummary);
 
     summaryAction
@@ -101,6 +107,8 @@ public class MutationWebService implements WebService {
         controller
             .createAction("status")
             .setDescription("Quick status check - has report? score?")
+            .setSince("1.0")
+            .setResponseExample(example("status.json"))
             .setHandler(this::handleStatus);
 
     statusAction
@@ -118,6 +126,7 @@ public class MutationWebService implements WebService {
         controller
             .createAction("delete")
             .setDescription("Delete mutation report for project/branch")
+            .setSince("1.0")
             .setPost(true)
             .setHandler(this::handleDelete);
 
@@ -140,6 +149,8 @@ public class MutationWebService implements WebService {
         controller
             .createAction("badge")
             .setDescription("Mutation score badge (SVG, shields.io style)")
+            .setSince("1.0")
+            .setResponseExample(example("badge.svg"))
             .setHandler(this::handleBadge);
 
     badgeAction.createParam("projectKey").setRequired(true).setDescription("SonarQube project key");
@@ -150,6 +161,14 @@ public class MutationWebService implements WebService {
         .setDescription("Branch name (default: main)");
 
     controller.done();
+  }
+
+  /**
+   * A response example shipped as a resource beside this class, which SonarQube's web API
+   * documentation renders; it logs a warning at startup for each GET action without one.
+   */
+  static URL example(String name) {
+    return MutationWebService.class.getResource("example-" + name);
   }
 
   private boolean authorizeMutationWrite(Request request, Response response) throws IOException {

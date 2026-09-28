@@ -1,0 +1,7 @@
+{
+  "projectKey": "my-project",
+  "branch": "main",
+  "hasReport": true,
+  "mutationScore": 86.6,
+  "totalMutants": 124
+}

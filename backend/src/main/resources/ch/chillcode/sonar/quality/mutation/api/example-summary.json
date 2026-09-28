@@ -1,0 +1,14 @@
+{
+  "hasReport": true,
+  "projectKey": "my-project",
+  "branch": "main",
+  "mutationScore": 86.6,
+  "totalMutants": 124,
+  "killedMutants": 97,
+  "survivedMutants": 15,
+  "noCoverageMutants": 0,
+  "timeoutMutants": 0,
+  "ignoredMutants": 12,
+  "tool": "cargo-mutants",
+  "language": "rust"
+}
