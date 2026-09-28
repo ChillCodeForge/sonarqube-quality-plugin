@@ -20,7 +20,9 @@ The Maven build targets Java 21 and SonarQube plugin API `13.5.0.4319`; its Sona
 
 ## Build
 
-Build the frontend before packaging the plugin. The frontend build writes the two self-contained SonarQube page-extension bundles into `backend/src/main/resources/static/`.
+Build the frontend before packaging the plugin. The frontend build writes the two self-contained SonarQube page-extension bundles into `backend/src/main/resources/static/`. Those bundles are committed, so a backend-only change packages without rebuilding them.
+
+The frontend needs Node 22 (CI uses `node:22.23.1`) and the ChillCode npm registry: the `@chillcode/*` packages and about half the lockfile resolve from `artifacts.chillcode.de`, so `npm ci` fails without `NPM_CONFIG_REGISTRY=https://artifacts.chillcode.de/npm/npm-virtual/`.
 
 ```bash
 cd frontend
@@ -45,6 +47,18 @@ Replacing a SonarQube plugin JAR requires a SonarQube restart or stack redeploym
 
 The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are stored under the `projectKey` and `branch` submitted with the upload request; those request parameters override report metadata.
 
+The upload token is read once at startup from exactly `/run/secrets/chillcode_mutation_upload_token`. Outside Docker Swarm, write the token to that path, readable by the SonarQube user, before starting SonarQube; `/run` is usually cleared on reboot, so recreate it at boot (for example with a `systemd-tmpfiles` rule). Without it, upload and delete answer 503.
+
+### Configuration
+
+Set these in `conf/sonar.properties`:
+
+| Key | Default | Effect |
+|---|---|---|
+| `chillcode.mutation.storage` | `/opt/sonarqube/mutation-reports` | Where the upload API stores reports. The measure computer always reads the default path, so moving it stops measures being published. |
+| `chillcode.mutation.maxReportSize` | `52428800` (50 MB) | Largest decompressed upload, in bytes. |
+| `chillcode.mutation.retention.prDays` | `14` | Read, but nothing runs the pull-request report cleanup yet, so it has no effect. |
+
 ## CI upload
 
 The upload API expects a gzip-compressed report in a multipart form field named `report` and a `MUTATION_UPLOAD_TOKEN` bearer credential. Production reads that token from the Docker Swarm secret mounted at `/run/secrets/chillcode_mutation_upload_token`; inject the same value into CI as the `MUTATION_UPLOAD_TOKEN` secret. It is distinct from an optional `SONAR_TOKEN`, which is used only when the helper also runs SonarScanner. Never pass either token on a command line or commit it: the examples below hand the header to curl on stdin (`-H @-`), because any local user can read a command line from the process list.
@@ -60,7 +74,9 @@ printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --sil
 
 Use the target SonarQube server's configured authentication policy and keep credentials out of source code and logs.
 
-A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures.
+A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures: the server's Compute Engine reads the report while processing the analysis. Only the `main` report becomes measures; reports uploaded for other branches are stored and shown on the Mutation Testing page while that branch is selected, but no analysis publishes them.
+
+When the scanner runs in the same job that produced the report, `sonar.chillcode.mutationReport` can instead point the scanner-side sensor at the local report file. That sensor runs only for Java, JavaScript, TypeScript and Python projects.
 
 ### Stryker
 
@@ -124,6 +140,8 @@ MUTATION_UPLOAD_TOKEN="$MUTATION_UPLOAD_TOKEN" ./scripts/upload-mutation-report.
   /tmp/mutmut.gz "$SONAR_HOST_URL"
 ```
 
+The helper sends the commit as a `commit` query parameter, which the server ignores. When `CI`, `SONAR_TOKEN` and `sonar-scanner` are all present it also runs a SonarScanner analysis of the current directory, passing `sonar.chillcode.mutation*` properties the plugin does not read; the measures come from the stored report either way.
+
 ## API
 
 | Endpoint | Purpose |
@@ -141,6 +159,8 @@ MUTATION_UPLOAD_TOKEN="$MUTATION_UPLOAD_TOKEN" ./scripts/upload-mutation-report.
 
 After a report has been uploaded and a later analysis has published the custom measure, add `mutation_score < 60` as an Error condition to the relevant SonarQube Quality Gate.
 
+The analysis publishes `mutation_score` (percent), the counts `mutation_total`, `mutation_killed`, `mutation_survived`, `mutation_no_coverage`, `mutation_timeout` and `mutation_ignored`, and `mutation_tool` and `mutation_language`. `mutation_duration` is defined but never written. The score is killed mutants over all mutants except ignored ones.
+
 ## Development checks
 
 ```bash
@@ -157,6 +177,7 @@ backend/     SonarQube plugin, API, storage, parser, metrics, and pages
 frontend/    React page extensions built into backend resources
 scripts/     Upload helper and mutation-report converters
 schemas/     Normalized report schema
+.ci/         Swarm deploy scripts the Drone pipeline runs
 ```
 
 ## License
