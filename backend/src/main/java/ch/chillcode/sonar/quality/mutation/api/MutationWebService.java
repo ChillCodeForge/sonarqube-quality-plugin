@@ -160,19 +160,40 @@ public class MutationWebService implements WebService {
     return MutationWebService.class.getResource("example-" + name);
   }
 
-  private boolean authorizeMutationWrite(Request request, Response response) throws IOException {
+  boolean authorizeMutationWrite(Request request, Response response) throws IOException {
+    String provided = request.header("Authorization").orElse("");
+    if (uploadToken != null && !uploadToken.isBlank()) {
+      String expected = "Bearer " + uploadToken;
+      if (MessageDigest.isEqual(
+          expected.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8))) {
+        return true;
+      }
+    }
+    if (!provided.isBlank() && isValidSonarToken(request.localConnector(), provided)) {
+      return true;
+    }
     if (uploadToken == null || uploadToken.isBlank()) {
       writeText(response, 503, "Mutation upload is not configured");
       return false;
     }
-    String provided = request.header("Authorization").orElse("");
-    String expected = "Bearer " + uploadToken;
-    if (!MessageDigest.isEqual(
-        expected.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8))) {
-      writeText(response, 403, "Forbidden");
+    writeText(response, 403, "Forbidden");
+    return false;
+  }
+
+  static boolean isValidSonarToken(LocalConnector connector, String authHeader) {
+    if (connector == null || authHeader == null || authHeader.isBlank()) {
       return false;
     }
-    return true;
+    try {
+      LocalConnector.LocalResponse response = connector.call(new ValidateTokenRequest(authHeader));
+      if (response.getStatus() == 200) {
+        String body = new String(response.getBytes(), StandardCharsets.UTF_8);
+        return body.contains("\"valid\":true");
+      }
+    } catch (RuntimeException e) {
+      return false;
+    }
+    return false;
   }
 
   /**

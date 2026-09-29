@@ -92,10 +92,18 @@ class MutationWebServiceTest {
 
   /** A connector whose every local call answers {@code status}. */
   private static LocalConnector connectorAnswering(int status) {
-    return call -> answer(status);
+    return connectorAnswering(status, "");
+  }
+
+  private static LocalConnector connectorAnswering(int status, String body) {
+    return call -> answer(status, body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }
 
   private static LocalConnector.LocalResponse answer(int status) {
+    return answer(status, new byte[0]);
+  }
+
+  private static LocalConnector.LocalResponse answer(int status, byte[] bytes) {
     return new LocalConnector.LocalResponse() {
       @Override
       public int getStatus() {
@@ -109,7 +117,7 @@ class MutationWebServiceTest {
 
       @Override
       public byte[] getBytes() {
-        return new byte[0];
+        return bytes;
       }
 
       @Override
@@ -315,5 +323,102 @@ class MutationWebServiceTest {
     assertThrows(
         IOException.class,
         () -> MutationWebService.readLimited(new ByteArrayInputStream(report), report.length - 1));
+  }
+
+  @Test
+  void validatesSonarTokenSuccessfully() {
+    LocalConnector connector = connectorAnswering(200, "{\"valid\":true}");
+    assertTrue(MutationWebService.isValidSonarToken(connector, "Bearer squ_valid_token"));
+  }
+
+  @Test
+  void rejectsInvalidSonarToken() {
+    LocalConnector connector = connectorAnswering(200, "{\"valid\":false}");
+    assertFalse(MutationWebService.isValidSonarToken(connector, "Bearer squ_invalid_token"));
+  }
+
+  @Test
+  void rejectsSonarTokenOnNon200Response() {
+    LocalConnector connector = connectorAnswering(401, "{\"valid\":false}");
+    assertFalse(MutationWebService.isValidSonarToken(connector, "Bearer squ_token"));
+  }
+
+  @Test
+  void handlesExceptionDuringTokenValidationSafely() {
+    LocalConnector throwingConnector =
+        call -> {
+          throw new RuntimeException("connection error");
+        };
+    assertFalse(MutationWebService.isValidSonarToken(throwingConnector, "Bearer squ_token"));
+    assertFalse(MutationWebService.isValidSonarToken(null, "Bearer squ_token"));
+    assertFalse(MutationWebService.isValidSonarToken(connectorAnswering(200), null));
+    assertFalse(MutationWebService.isValidSonarToken(connectorAnswering(200), "   "));
+  }
+
+  @Test
+  void authorizesMutationWriteWithValidSonarToken() throws IOException {
+    MutationWebService service =
+        new MutationWebService(
+            new MutationReportParser(), new MutationReportStorageService(), "configured-secret");
+
+    Request req = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(req.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer squ_sonar_token"));
+    org.mockito.Mockito.when(req.localConnector())
+        .thenReturn(connectorAnswering(200, "{\"valid\":true}"));
+
+    RecordingResponse res = new RecordingResponse();
+    assertTrue(service.authorizeMutationWrite(req, res));
+    assertNull(res.status());
+  }
+
+  @Test
+  void authorizesMutationWriteWithValidSonarTokenWhenNoSecretConfigured() throws IOException {
+    MutationWebService service =
+        new MutationWebService(
+            new MutationReportParser(), new MutationReportStorageService(), null);
+
+    Request req = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(req.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer squ_sonar_token"));
+    org.mockito.Mockito.when(req.localConnector())
+        .thenReturn(connectorAnswering(200, "{\"valid\":true}"));
+
+    RecordingResponse res = new RecordingResponse();
+    assertTrue(service.authorizeMutationWrite(req, res));
+    assertNull(res.status());
+  }
+
+  @Test
+  void rejectsMutationWriteWithInvalidTokenWhenSecretConfigured() throws IOException {
+    MutationWebService service =
+        new MutationWebService(
+            new MutationReportParser(), new MutationReportStorageService(), "configured-secret");
+
+    Request req = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(req.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer invalid_token"));
+    org.mockito.Mockito.when(req.localConnector())
+        .thenReturn(connectorAnswering(200, "{\"valid\":false}"));
+
+    RecordingResponse res = new RecordingResponse();
+    assertFalse(service.authorizeMutationWrite(req, res));
+    assertEquals(403, res.status());
+  }
+
+  @Test
+  void answersNotConfiguredWhenNoSecretAndInvalidToken() throws IOException {
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), new MutationReportStorageService(), "");
+
+    Request req = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(req.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer invalid_token"));
+    org.mockito.Mockito.when(req.localConnector())
+        .thenReturn(connectorAnswering(200, "{\"valid\":false}"));
+
+    RecordingResponse res = new RecordingResponse();
+    assertFalse(service.authorizeMutationWrite(req, res));
+    assertEquals(503, res.status());
   }
 }
