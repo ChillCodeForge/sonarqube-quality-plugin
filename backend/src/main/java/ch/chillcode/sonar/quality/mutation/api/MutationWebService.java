@@ -22,7 +22,7 @@ public class MutationWebService implements WebService {
 
   static final Path UPLOAD_TOKEN_FILE = Path.of("/run/secrets/chillcode_mutation_upload_token");
 
-  // API parameter names and the response property keys this service emits;
+  // API parameter names and the response property keys this service emits,
   // constants keep the web-service description and the JSON responses in sync.
   static final String PARAM_PROJECT_KEY = "projectKey";
   static final String PARAM_BRANCH = "branch";
@@ -41,9 +41,14 @@ public class MutationWebService implements WebService {
   private final String uploadToken;
 
   public MutationWebService(MutationReportParser parser, MutationReportStorageService storage) {
+    this(parser, storage, readUploadToken(UPLOAD_TOKEN_FILE));
+  }
+
+  MutationWebService(
+      MutationReportParser parser, MutationReportStorageService storage, String uploadToken) {
     this.parser = parser;
     this.storage = storage;
-    this.uploadToken = readUploadToken(UPLOAD_TOKEN_FILE);
+    this.uploadToken = uploadToken;
   }
 
   @Override

@@ -55,7 +55,7 @@ final class RecordingResponse implements Response, Response.Stream {
 
   @Override
   public JsonWriter newJsonWriter() {
-    throw new UnsupportedOperationException();
+    return JsonWriter.of(new java.io.OutputStreamWriter(body, StandardCharsets.UTF_8));
   }
 
   @Override

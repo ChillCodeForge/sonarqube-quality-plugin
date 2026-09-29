@@ -173,4 +173,134 @@ class MutationReportParserTest {
         ex.getMessage().contains("mutmut")
             || ex.getCause() instanceof UnsupportedOperationException);
   }
+
+  // --- Stryker JSON ---
+
+  @Test
+  void parsesStrykerReportWithMixedStatusesAndMetrics() throws IOException {
+    String json =
+        """
+        {
+          "schemaVersion": 1,
+          "projectName": "sample-project",
+          "branch": "feature/test",
+          "files": {
+            "src/calc.ts": {
+              "mutants": [
+                {
+                  "id": "1",
+                  "mutatorName": "BinaryExpression",
+                  "replacement": "-",
+                  "status": "Killed",
+                  "statusReason": "Failed test",
+                  "location": {
+                    "start": {"line": 10, "column": 5},
+                    "end": {"line": 10, "column": 6}
+                  }
+                },
+                {
+                  "id": "2",
+                  "mutatorName": "EqualityOperator",
+                  "replacement": "===",
+                  "status": "Survived",
+                  "location": {
+                    "start": {"line": 20, "column": 1},
+                    "end": {"line": 20, "column": 3}
+                  }
+                },
+                {
+                  "id": "3",
+                  "mutatorName": "BlockStatement",
+                  "replacement": "{}",
+                  "status": "NoCoverage"
+                },
+                {
+                  "id": "4",
+                  "mutatorName": "Timeout",
+                  "replacement": "",
+                  "status": "Timeout"
+                },
+                {
+                  "id": "5",
+                  "mutatorName": "Ignored",
+                  "replacement": "",
+                  "status": "Ignored"
+                },
+                {
+                  "id": "6",
+                  "mutatorName": "CompileError",
+                  "replacement": "",
+                  "status": "CompileError"
+                }
+              ]
+            },
+            "lib/helper.js": {
+              "mutants": []
+            },
+            "script.py": {
+              "mutants": []
+            }
+          }
+        }
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+    assertEquals("stryker", report.getTool());
+    assertEquals("sample-project", report.getProject());
+    assertEquals("feature/test", report.getBranch());
+    assertEquals("typescript", report.getLanguage());
+
+    assertEquals(6, report.getSummary().getTotal());
+    assertEquals(1, report.getSummary().getKilled());
+    assertEquals(1, report.getSummary().getSurvived());
+    assertEquals(1, report.getSummary().getNoCoverage());
+    assertEquals(1, report.getSummary().getTimeout());
+    assertEquals(1, report.getSummary().getIgnored());
+    // Score: 1 killed / (6 total - 1 ignored) = 20.0%
+    assertEquals(20.0, report.getSummary().getScore(), 0.001);
+
+    assertEquals(3, report.getFiles().size());
+    NormalizedMutationReport.MutationFile calcFile =
+        report.getFiles().stream()
+            .filter(f -> f.getPath().equals("src/calc.ts"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("typescript", calcFile.getLanguage());
+    assertEquals(6, calcFile.getMutants().size());
+    assertEquals(25.0, ((Number) calcFile.getMetrics().get("score")).doubleValue(), 0.001);
+    assertEquals(6, calcFile.getMetrics().get("total"));
+    assertEquals(1, calcFile.getMetrics().get("killed"));
+    assertEquals(1, calcFile.getMetrics().get("survived"));
+    assertEquals(1, calcFile.getMetrics().get("noCoverage"));
+    assertEquals(1, calcFile.getMetrics().get("timeout"));
+    assertEquals(1, calcFile.getMetrics().get("ignored"));
+
+    NormalizedMutationReport.MutationMutant m1 = calcFile.getMutants().get(0);
+    assertEquals("1", m1.getId());
+    assertEquals("BinaryExpression", m1.getMutatorName());
+    assertEquals("-", m1.getReplacement());
+    assertEquals("KILLED", m1.getStatus());
+    assertEquals("Failed test", m1.getStatusReason());
+    org.junit.jupiter.api.Assertions.assertNotNull(m1.getLocation());
+    assertEquals(10, m1.getLocation().getStart().getLine());
+    assertEquals(5, m1.getLocation().getStart().getColumn());
+    assertEquals(10, m1.getLocation().getEnd().getLine());
+    assertEquals(6, m1.getLocation().getEnd().getColumn());
+  }
+
+  @Test
+  void strykerDetectsPythonProject() throws IOException {
+    String json =
+        """
+        {
+          "schemaVersion": 1,
+          "projectName": "my-python-app",
+          "files": {}
+        }
+        """;
+    NormalizedMutationReport report = parser.parse(json);
+    assertEquals("stryker", report.getTool());
+    assertEquals("python", report.getLanguage());
+    assertEquals(0.0, report.getSummary().getScore(), 0.001);
+  }
 }
