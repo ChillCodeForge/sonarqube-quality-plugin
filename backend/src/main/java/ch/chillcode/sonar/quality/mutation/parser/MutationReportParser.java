@@ -39,6 +39,15 @@ public class MutationReportParser {
   private static final String STATUS_NON_VIABLE = "NON_VIABLE";
   private static final String STATUS_UNKNOWN = "UNKNOWN";
 
+  // Metric keys emitted in per-file metrics maps and consumed by the frontend.
+  private static final String METRIC_SCORE = "score";
+  private static final String METRIC_TOTAL = "total";
+  private static final String METRIC_KILLED = "killed";
+  private static final String METRIC_SURVIVED = "survived";
+  private static final String METRIC_NO_COVERAGE = "noCoverage";
+  private static final String METRIC_TIMEOUT = "timeout";
+  private static final String METRIC_IGNORED = "ignored";
+
   private static final Logger LOG = Loggers.get(MutationReportParser.class);
   private final ObjectMapper mapper;
 
@@ -254,13 +263,14 @@ public class MutationReportParser {
     int fileValid =
         fileCounts.killed + fileCounts.survived + fileCounts.noCoverage + fileCounts.timeout;
     java.util.Map<String, Object> fileMetrics = new java.util.HashMap<>();
-    fileMetrics.put("score", fileValid > 0 ? (double) fileCounts.killed / fileValid * 100 : 0.0);
-    fileMetrics.put("total", fileCounts.total);
-    fileMetrics.put("killed", fileCounts.killed);
-    fileMetrics.put("survived", fileCounts.survived);
-    fileMetrics.put("noCoverage", fileCounts.noCoverage);
-    fileMetrics.put("timeout", fileCounts.timeout);
-    fileMetrics.put("ignored", fileCounts.ignored);
+    fileMetrics.put(
+        METRIC_SCORE, fileValid > 0 ? (double) fileCounts.killed / fileValid * 100 : 0.0);
+    fileMetrics.put(METRIC_TOTAL, fileCounts.total);
+    fileMetrics.put(METRIC_KILLED, fileCounts.killed);
+    fileMetrics.put(METRIC_SURVIVED, fileCounts.survived);
+    fileMetrics.put(METRIC_NO_COVERAGE, fileCounts.noCoverage);
+    fileMetrics.put(METRIC_TIMEOUT, fileCounts.timeout);
+    fileMetrics.put(METRIC_IGNORED, fileCounts.ignored);
     mFile.setMetrics(fileMetrics);
     return mFile;
   }
@@ -302,11 +312,11 @@ public class MutationReportParser {
 
   private String mapStrykerStatus(String strykerStatus) {
     return switch (strykerStatus.toLowerCase()) {
-      case "killed" -> STATUS_KILLED;
-      case "survived" -> STATUS_SURVIVED;
+      case METRIC_KILLED -> STATUS_KILLED;
+      case METRIC_SURVIVED -> STATUS_SURVIVED;
       case "nocoverage", "no_coverage" -> STATUS_NO_COVERAGE;
-      case "timeout" -> STATUS_TIMEOUT;
-      case "ignored" -> STATUS_IGNORED;
+      case METRIC_TIMEOUT -> STATUS_TIMEOUT;
+      case METRIC_IGNORED -> STATUS_IGNORED;
       case "error", "compileerror" -> "ERROR";
       default -> STATUS_UNKNOWN;
     };
@@ -403,13 +413,13 @@ public class MutationReportParser {
       }
       int fValid = fTotal - fIgnored;
       Map<String, Object> fileMetrics = new HashMap<>();
-      fileMetrics.put("score", fValid > 0 ? (double) fKilled / fValid * 100 : 0.0);
-      fileMetrics.put("total", fTotal);
-      fileMetrics.put("killed", fKilled);
-      fileMetrics.put("survived", fSurvived);
-      fileMetrics.put("noCoverage", fNoCoverage);
-      fileMetrics.put("timeout", fTimeout);
-      fileMetrics.put("ignored", fIgnored);
+      fileMetrics.put(METRIC_SCORE, fValid > 0 ? (double) fKilled / fValid * 100 : 0.0);
+      fileMetrics.put(METRIC_TOTAL, fTotal);
+      fileMetrics.put(METRIC_KILLED, fKilled);
+      fileMetrics.put(METRIC_SURVIVED, fSurvived);
+      fileMetrics.put(METRIC_NO_COVERAGE, fNoCoverage);
+      fileMetrics.put(METRIC_TIMEOUT, fTimeout);
+      fileMetrics.put(METRIC_IGNORED, fIgnored);
       mFile.setMetrics(fileMetrics);
       files.add(mFile);
     }
