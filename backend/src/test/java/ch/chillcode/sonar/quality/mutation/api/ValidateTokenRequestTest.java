@@ -14,7 +14,7 @@ class ValidateTokenRequestTest {
   void providesExpectedRequestProperties() {
     ValidateTokenRequest request = new ValidateTokenRequest("Bearer my-token");
 
-    assertEquals("api/authentication/validate", request.getPath());
+    assertEquals("api/users/current", request.getPath());
     assertEquals("application/json", request.getMediaType());
     assertEquals("GET", request.getMethod());
     assertFalse(request.hasParam("any"));

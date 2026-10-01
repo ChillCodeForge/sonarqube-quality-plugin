@@ -327,19 +327,19 @@ class MutationWebServiceTest {
 
   @Test
   void validatesSonarTokenSuccessfully() {
-    LocalConnector connector = connectorAnswering(200, "{\"valid\":true}");
+    LocalConnector connector = connectorAnswering(200, "{\"isLoggedIn\":true}");
     assertTrue(MutationWebService.isValidSonarToken(connector, "Bearer squ_valid_token"));
   }
 
   @Test
   void rejectsInvalidSonarToken() {
-    LocalConnector connector = connectorAnswering(200, "{\"valid\":false}");
+    LocalConnector connector = connectorAnswering(200, "{\"isLoggedIn\":false}");
     assertFalse(MutationWebService.isValidSonarToken(connector, "Bearer squ_invalid_token"));
   }
 
   @Test
   void rejectsSonarTokenOnNon200Response() {
-    LocalConnector connector = connectorAnswering(401, "{\"valid\":false}");
+    LocalConnector connector = connectorAnswering(401, "{\"isLoggedIn\":false}");
     assertFalse(MutationWebService.isValidSonarToken(connector, "Bearer squ_token"));
   }
 
@@ -365,7 +365,7 @@ class MutationWebServiceTest {
     org.mockito.Mockito.when(req.header("Authorization"))
         .thenReturn(java.util.Optional.of("Bearer squ_sonar_token"));
     org.mockito.Mockito.when(req.localConnector())
-        .thenReturn(connectorAnswering(200, "{\"valid\":true}"));
+        .thenReturn(connectorAnswering(200, "{\"isLoggedIn\":true}"));
 
     RecordingResponse res = new RecordingResponse();
     assertTrue(service.authorizeMutationWrite(req, res));
@@ -382,7 +382,7 @@ class MutationWebServiceTest {
     org.mockito.Mockito.when(req.header("Authorization"))
         .thenReturn(java.util.Optional.of("Bearer squ_sonar_token"));
     org.mockito.Mockito.when(req.localConnector())
-        .thenReturn(connectorAnswering(200, "{\"valid\":true}"));
+        .thenReturn(connectorAnswering(200, "{\"isLoggedIn\":true}"));
 
     RecordingResponse res = new RecordingResponse();
     assertTrue(service.authorizeMutationWrite(req, res));
@@ -399,7 +399,7 @@ class MutationWebServiceTest {
     org.mockito.Mockito.when(req.header("Authorization"))
         .thenReturn(java.util.Optional.of("Bearer invalid_token"));
     org.mockito.Mockito.when(req.localConnector())
-        .thenReturn(connectorAnswering(200, "{\"valid\":false}"));
+        .thenReturn(connectorAnswering(200, "{\"isLoggedIn\":false}"));
 
     RecordingResponse res = new RecordingResponse();
     assertFalse(service.authorizeMutationWrite(req, res));
@@ -415,7 +415,7 @@ class MutationWebServiceTest {
     org.mockito.Mockito.when(req.header("Authorization"))
         .thenReturn(java.util.Optional.of("Bearer invalid_token"));
     org.mockito.Mockito.when(req.localConnector())
-        .thenReturn(connectorAnswering(200, "{\"valid\":false}"));
+        .thenReturn(connectorAnswering(200, "{\"isLoggedIn\":false}"));
 
     RecordingResponse res = new RecordingResponse();
     assertFalse(service.authorizeMutationWrite(req, res));

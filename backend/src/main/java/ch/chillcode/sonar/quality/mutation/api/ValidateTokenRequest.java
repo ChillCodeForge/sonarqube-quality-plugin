@@ -6,8 +6,10 @@ import java.util.Optional;
 import org.sonar.api.server.ws.LocalConnector;
 
 /**
- * A local call to SonarQube's own {@code api/authentication/validate} to verify whether an
- * Authorization header contains a valid user or analysis token.
+ * A local call to SonarQube's own {@code api/users/current}, which answers {@code
+ * "isLoggedIn":true} when the request's Authorization header carries a valid user or analysis
+ * token. {@code api/authentication/validate} cannot stand in: SonarQube implements it as a servlet
+ * filter, which a local call cannot reach.
  */
 final class ValidateTokenRequest implements LocalConnector.LocalRequest {
 
@@ -19,7 +21,7 @@ final class ValidateTokenRequest implements LocalConnector.LocalRequest {
 
   @Override
   public String getPath() {
-    return "api/authentication/validate";
+    return "api/users/current";
   }
 
   @Override
