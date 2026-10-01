@@ -188,7 +188,7 @@ public class MutationWebService implements WebService {
       LocalConnector.LocalResponse response = connector.call(new ValidateTokenRequest(authHeader));
       if (response.getStatus() == 200) {
         String body = new String(response.getBytes(), StandardCharsets.UTF_8);
-        return body.contains("\"valid\":true");
+        return body.contains("\"isLoggedIn\":true");
       }
     } catch (RuntimeException e) {
       return false;
