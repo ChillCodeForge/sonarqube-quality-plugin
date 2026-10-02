@@ -31,8 +31,15 @@ coverage:
   newCodeMinimum: 0
 
 megalinter:
-  version: v9.4.0
+  # v9.4.0's TYPESCRIPT_ES/JAVASCRIPT_ES descriptor passes --no-eslintrc, which
+  # ESLint 9's flat-config CLI (this repo's frontend/eslint.config.js) rejects
+  # outright ("Invalid option '--no-eslintrc'") - verified locally running the
+  # shared wrapper against this repo's own frontend. v10.1.0 bundles ESLint 10
+  # with native flat-config support and drops that flag (see
+  # development-standards megalinter/node.yml's own comment on this exact
+  # issue). Pinned to the same version docker-compose-examples already uses.
+  version: v10.1.0
   osvScannerVersion: v2.2.3
 
 standards:
-  ref: standards-v1.0.8
+  ref: standards-v1.0.22

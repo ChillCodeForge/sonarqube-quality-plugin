@@ -7,7 +7,7 @@ clone:
   image: drone/git:1.6.0
 
 steps:
-  - name: frontend-quality
+  - name: lint-frontend-quality
     image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
     environment:
       NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
@@ -20,14 +20,22 @@ steps:
       - npm run typecheck
       - npm run build
 
-  - name: backend-verify
+  # mvn verify already binds spotless:check (format), spotbugs:check
+  # (blocking, threshold High) and the jacoco-instrumented unit tests to the
+  # same lifecycle phase (pom.xml: all three executions bound to <phase>verify
+  # or implied by it) - splitting into separate prep-/lint-/test- steps would
+  # re-run the same Maven reactor build multiple times for no gain, so this
+  # stays one step; prefixed test- because the dominant cost/purpose is the
+  # test run, matching the DAG doc's own precedent for repos where format and
+  # test share one Maven invocation (#176, "Maven-class handling (java-v1)").
+  - name: test-backend-verify
     image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
     commands:
       - mvn --batch-mode --no-transfer-progress -f backend/pom.xml clean verify
     depends_on:
-      - frontend-quality
+      - lint-frontend-quality
 
-  - name: converter-regression-tests
+  - name: test-converter-regression
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
     commands:
       - python3 scripts/tests/test_normalize_mutation_report.py
@@ -35,9 +43,148 @@ steps:
       - bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
       - sh -n .ci/deploy.sh .ci/deploy-remote.sh
     depends_on:
-      - backend-verify
+      - test-backend-verify
 
-  - name: sonarqube-analysis
+  # development-standards clone for the shared MegaLinter wrapper + PR report
+  # chain (#176, decisions/megalinter-quality-platform.md). Same pattern as
+  # docker-compose-examples/DocComplete's own prep-development-standards /
+  # prep-fetch-development-standards step. No depends_on: the clone itself
+  # only needs .quality.yaml and the deploy key, not any build output.
+  - name: prep-development-standards
+    image: registry.chillcode.de/dockerhub-cache/alpine/git:2.47.2
+    environment:
+      DEPLOY_KEY:
+        from_secret: devstandards_deploy_key
+    commands:
+      - |
+        set -eu
+        REF=$(sed -n '/^standards:/,/^[^[:space:]]/p' .quality.yaml \
+              | sed -n 's/^[[:space:]]*ref:[[:space:]]*//p' \
+              | head -n1 | sed 's/#.*//' | tr -d '[:space:]')
+        if [ -z "$REF" ]; then
+          echo "standards.ref is not declared in .quality.yaml." >&2
+          exit 1
+        fi
+        echo "development-standards ref: $REF"
+        rm -rf .chillcode-standards
+        apk add --no-cache --quiet openssh-client >/dev/null
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" | base64 -d > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        GITEA_SSH_HOST=192.168.178.33
+        ssh-keyscan -t ed25519 "$GITEA_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+        GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=~/.ssh/known_hosts" \
+          git clone --quiet --depth 1 --branch "$REF" \
+          "git@$GITEA_SSH_HOST:ChillCode/development-standards.git" \
+          .chillcode-standards
+        git -C .chillcode-standards rev-parse HEAD
+    when:
+      event:
+        - pull_request
+        - push
+
+  # Real prerequisites: ESLint (TYPESCRIPT_ES) needs installed frontend
+  # node_modules (lint-frontend-quality's npm ci), SpotBugs's own isolated
+  # container needs already-compiled backend classes it reads via the POM
+  # (test-backend-verify). converter-regression has no bearing on MegaLinter
+  # inputs but keeps the gate after the repo's own test suites, matching the
+  # brief's "lint-*/MegaLinter ... vor teuren Builds" placement relative to
+  # the only truly expensive step here (sonarqube-analysis/release-deploy).
+  - name: lint-megalinter-run
+    image: registry.chillcode.de/dockerhub-cache/docker:26-cli
+    volumes:
+      - name: dockersock
+        path: /var/run/docker.sock
+    depends_on:
+      - prep-development-standards
+      - test-backend-verify
+      - test-converter-regression
+    commands:
+      - sh .chillcode-standards/ci/run-megalinter.sh . .chillcode-quality-reports
+    when:
+      event:
+        - pull_request
+        - push
+
+  - name: report-megalinter-pr
+    image: registry.chillcode.de/dockerhub-cache/python:3.11-slim
+    depends_on:
+      - lint-megalinter-run
+    commands:
+      - |
+        set -eu
+        python3 .chillcode-standards/ci/generate-megalinter-pr-report.py \
+          --reports-dir .chillcode-quality-reports/megalinter-reports \
+          --out megalinter-pr-report.md \
+          --gate-out .chillcode-quality-reports/megalinter-gate.json \
+          --pipeline-context repo=ChillCode/sonarqube-quality-plugin \
+          --pipeline-context build=${DRONE_BUILD_NUMBER} \
+          --pipeline-context commit=${DRONE_COMMIT_SHA}
+    when:
+      event:
+        - pull_request
+        - push
+      status:
+        - success
+        - failure
+
+  - name: report-megalinter-gitea-comment
+    image: registry.chillcode.de/dockerhub-cache/alpine:3.21
+    environment:
+      GITEA_ADDRESS: https://git.chillcode.de
+      REVIEWDOG_GITEA_API_TOKEN:
+        from_secret: drone-reviewdog-pr-gate
+    depends_on:
+      - report-megalinter-pr
+    commands:
+      - apk add --no-cache curl jq >/dev/null
+      - sh .chillcode-standards/ci/update-gitea-pr-comment.sh "$DRONE_REPO" "$DRONE_PULL_REQUEST" megalinter-pr-report.md
+    when:
+      event:
+        - pull_request
+      status:
+        - success
+        - failure
+
+  # Single place a PR's (and, per the brief, master push's) CI status is
+  # decided from MegaLinter's blocking policy. Runs on push too (not just
+  # pull_request) so that sonarqube-analysis/release-deploy-plugin below can
+  # depend on it: "Sonar main QG und Plugin Deploy erst nach Gate" per the
+  # brief - same pattern DocComplete's report-megalinter-pr-gate already
+  # uses (event: [pull_request, push, tag]).
+  - name: report-megalinter-pr-gate
+    image: registry.chillcode.de/dockerhub-cache/python:3.11-slim
+    depends_on:
+      - report-megalinter-pr
+    commands:
+      - sh .chillcode-standards/ci/megalinter-pr-gate.sh .chillcode-quality-reports/megalinter-gate.json
+    when:
+      event:
+        - pull_request
+        - push
+      status:
+        - success
+        - failure
+
+  - name: report-megalinter-inline-comments
+    image: registry.chillcode.de/dockerhub-cache/alpine:3.21
+    environment:
+      GITEA_ADDRESS: https://git.chillcode.de
+      REVIEWDOG_GITEA_API_TOKEN:
+        from_secret: drone-reviewdog-pr-gate
+    depends_on:
+      - lint-megalinter-run
+    commands:
+      - apk add --no-cache curl git >/dev/null
+      - sh .chillcode-standards/ci/post-sarif-inline-comments.sh .chillcode-quality-reports/megalinter-reports/megalinter-report.sarif megalinter
+    when:
+      event:
+        - pull_request
+      status:
+        - success
+        - failure
+
+  - name: analysis-sonarqube
     image: registry.chillcode.de/dockerhub-cache/sonarsource/sonar-scanner-cli:12
     environment:
       SONAR_HOST_URL: https://sonar.chillcode.de
@@ -63,24 +210,15 @@ steps:
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="$${DRONE_COMMIT_SHA}"
     depends_on:
-      - converter-regression-tests
+      - test-converter-regression
+      - report-megalinter-pr-gate
     when:
       ref:
         - refs/heads/master
       event:
         - push
 
-  - name: run-megalinter
-    image: registry.chillcode.de/dockerhub-cache/oxsecurity/megalinter:v9.4.0
-    environment:
-      DEFAULT_WORKSPACE: /drone/src
-      REPORT_OUTPUT_FOLDER: megalinter-reports
-      JSON_REPORTER: "true"
-      SARIF_REPORTER: "true"
-    depends_on:
-      - converter-regression-tests
-
-  - name: deploy-plugin
+  - name: release-deploy-plugin
     image: registry.chillcode.de/dockerhub-cache/library/alpine:3.21
     environment:
       DEPLOY_KEY_B64:
@@ -90,13 +228,18 @@ steps:
     commands:
       - sh .ci/deploy.sh
     depends_on:
-      - sonarqube-analysis
-      - run-megalinter
+      - analysis-sonarqube
+      - report-megalinter-pr-gate
     when:
       ref:
         - refs/heads/master
       event:
         - push
+
+volumes:
+  - name: dockersock
+    host:
+      path: /var/run/docker.sock
 
 trigger:
   ref:
