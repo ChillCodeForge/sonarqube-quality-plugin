@@ -100,7 +100,10 @@ steps:
       - test-backend-verify
       - test-converter-regression
     commands:
-      - sh .chillcode-standards/ci/run-megalinter.sh . .chillcode-quality-reports
+      - |
+        set -eu
+        trap 'rm -rf .cache /drone/src/.cache 2>/dev/null || true' EXIT
+        sh .chillcode-standards/ci/run-megalinter.sh . .chillcode-quality-reports
     when:
       event:
         - pull_request
@@ -205,7 +208,7 @@ steps:
           -Dsonar.java.binaries=backend/target/classes \
           -Dsonar.java.test.binaries=backend/target/test-classes \
           -Dsonar.coverage.jacoco.xmlReportPaths=backend/target/site/jacoco/jacoco.xml \
-          -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/** \
+          -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/**,.cache/**,.chillcode-standards/**,.chillcode-quality-reports/** \
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="$${DRONE_COMMIT_SHA}"
