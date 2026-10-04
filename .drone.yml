@@ -271,11 +271,6 @@ steps:
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
-    when:
-      ref:
-        - refs/heads/master
-      event:
-        - push
 trigger:
   branch: [master]
   event: [push, pull_request]
