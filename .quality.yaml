@@ -17,9 +17,8 @@ roots:
 
 capabilities:
   typescript: true
-  # The frontend currently has no automated suite.  Backend JUnit and the
-  # repository-owned converter regression tests are gated separately below.
-  tests: not-applicable
+  # Backend JUnit + converter regression tests are gated; frontend has no suite.
+  tests: required
   build: required
   container: false
 
@@ -42,4 +41,4 @@ megalinter:
   osvScannerVersion: v2.2.3
 
 standards:
-  ref: standards-v1.0.22
+  ref: standards-v1.2.3

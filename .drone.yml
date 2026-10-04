@@ -1,55 +1,21 @@
 ---
 kind: pipeline
 type: docker
-name: quality-and-deploy
-
-clone:
-  image: drone/git:1.6.0
-
+name: prep
+clone: { depth: 0 }
+node: { runner: drone-runner }
 steps:
-  - name: lint-frontend-quality
+  - name: prep-install-frontend
     image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
     environment:
       NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
       NPM_CONFIG_AUDIT: "false"
     commands:
-      - cd frontend
-      - npm ci
-      - npm run lint
-      - npm run format:check
-      - npm run typecheck
-      - npm run build
-
-  # mvn verify already binds spotless:check (format), spotbugs:check
-  # (blocking, threshold High) and the jacoco-instrumented unit tests to the
-  # same lifecycle phase (pom.xml: all three executions bound to <phase>verify
-  # or implied by it) - splitting into separate prep-/lint-/test- steps would
-  # re-run the same Maven reactor build multiple times for no gain, so this
-  # stays one step; prefixed test- because the dominant cost/purpose is the
-  # test run, matching the DAG doc's own precedent for repos where format and
-  # test share one Maven invocation (#176, "Maven-class handling (java-v1)").
-  - name: test-backend-verify
+      - cd frontend && npm ci
+  - name: prep-install-backend
     image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
     commands:
-      - mvn --batch-mode --no-transfer-progress -f backend/pom.xml clean verify
-    depends_on:
-      - lint-frontend-quality
-
-  - name: test-converter-regression
-    image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
-    commands:
-      - python3 scripts/tests/test_normalize_mutation_report.py
-      - python3 -m py_compile scripts/mutmut_to_stryker.py
-      - bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
-      - sh -n .ci/deploy.sh .ci/deploy-remote.sh
-    depends_on:
-      - test-backend-verify
-
-  # development-standards clone for the shared MegaLinter wrapper + PR report
-  # chain (#176, decisions/megalinter-quality-platform.md). Same pattern as
-  # docker-compose-examples/DocComplete's own prep-development-standards /
-  # prep-fetch-development-standards step. No depends_on: the clone itself
-  # only needs .quality.yaml and the deploy key, not any build output.
+      - mvn -B -ntp -DskipTests -Dspotless.check.skip=true -Dspotbugs.skip=true install -f backend/pom.xml
   - name: prep-development-standards
     image: registry.chillcode.de/dockerhub-cache/alpine/git:2.47.2
     environment:
@@ -78,44 +44,73 @@ steps:
           "git@$GITEA_SSH_HOST:ChillCode/development-standards.git" \
           .chillcode-standards
         git -C .chillcode-standards rev-parse HEAD
-    when:
-      event:
-        - pull_request
-        - push
-
-  # Real prerequisites: ESLint (TYPESCRIPT_ES) needs installed frontend
-  # node_modules (lint-frontend-quality's npm ci), SpotBugs's own isolated
-  # container needs already-compiled backend classes it reads via the POM
-  # (test-backend-verify). converter-regression has no bearing on MegaLinter
-  # inputs but keeps the gate after the repo's own test suites, matching the
-  # brief's "lint-*/MegaLinter ... vor teuren Builds" placement relative to
-  # the only truly expensive step here (sonarqube-analysis/release-deploy).
-  - name: lint-megalinter-run
+  - name: prep-sync
+    image: alpine:3.21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - mkdir -p /shared/src && cp -a . /shared/src
+      - mkdir -p /shared/src/.chillcode-standards && cp -a .chillcode-standards/. /shared/src/.chillcode-standards/
+    depends_on: [prep-install-frontend, prep-install-backend, prep-development-standards]
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+---
+kind: pipeline
+type: docker
+name: lint
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [prep]
+steps:
+  - name: lint-frontend-static
+    image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
+    environment:
+      NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
+      NPM_CONFIG_AUDIT: "false"
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src/frontend
+        npm run lint
+        npm run format:check
+        npm run typecheck
+  - name: lint-backend-static
+    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src/backend
+        mvn -B -ntp spotless:check
+    depends_on: [lint-frontend-static]
+  - name: lint-megalinter
     image: registry.chillcode.de/dockerhub-cache/docker:26-cli
     volumes:
-      - name: dockersock
-        path: /var/run/docker.sock
-    depends_on:
-      - prep-development-standards
-      - test-backend-verify
-      - test-converter-regression
+      - {name: shared, path: /shared}
+      - {name: megalinter-copy, path: /mlsrc}
+      - {name: dockersock, path: /var/run/docker.sock}
     commands:
       - |
         set -eu
-        trap 'rm -rf .cache /drone/src/.cache 2>/dev/null || true' EXIT
-        sh .chillcode-standards/ci/run-megalinter.sh . .chillcode-quality-reports
-    when:
-      event:
-        - pull_request
-        - push
-
+        cp -a /shared/src/. /mlsrc/
+        cd /mlsrc
+        status=0
+        sh .chillcode-standards/ci/run-megalinter.sh . .chillcode-quality-reports || status=$?
+        mkdir -p /shared/src/.chillcode-quality-reports
+        cp -a .chillcode-quality-reports/. /shared/src/.chillcode-quality-reports/
+        exit "$status"
+    depends_on: [lint-backend-static]
   - name: report-megalinter-pr
     image: registry.chillcode.de/dockerhub-cache/python:3.11-slim
-    depends_on:
-      - lint-megalinter-run
+    volumes: [{name: shared, path: /shared}]
     commands:
       - |
         set -eu
+        cd /shared/src
         python3 .chillcode-standards/ci/generate-megalinter-pr-report.py \
           --reports-dir .chillcode-quality-reports/megalinter-reports \
           --out megalinter-pr-report.md \
@@ -123,83 +118,144 @@ steps:
           --pipeline-context repo=ChillCode/sonarqube-quality-plugin \
           --pipeline-context build=${DRONE_BUILD_NUMBER} \
           --pipeline-context commit=${DRONE_COMMIT_SHA}
+    depends_on: [lint-megalinter]
     when:
-      event:
-        - pull_request
-        - push
-      status:
-        - success
-        - failure
-
+      status: [success, failure]
   - name: report-megalinter-gitea-comment
     image: registry.chillcode.de/dockerhub-cache/alpine:3.21
     environment:
       GITEA_ADDRESS: https://git.chillcode.de
       REVIEWDOG_GITEA_API_TOKEN:
         from_secret: drone-reviewdog-pr-gate
-    depends_on:
-      - report-megalinter-pr
+    volumes: [{name: shared, path: /shared}]
     commands:
       - apk add --no-cache curl jq >/dev/null
-      - sh .chillcode-standards/ci/update-gitea-pr-comment.sh "$DRONE_REPO" "$DRONE_PULL_REQUEST" megalinter-pr-report.md
+      - cd /shared/src && sh .chillcode-standards/ci/update-gitea-pr-comment.sh "$DRONE_REPO" "$DRONE_PULL_REQUEST" megalinter-pr-report.md
+    depends_on: [report-megalinter-pr]
     when:
-      event:
-        - pull_request
-      status:
-        - success
-        - failure
-
-  # Single place a PR's (and, per the brief, master push's) CI status is
-  # decided from MegaLinter's blocking policy. Runs on push too (not just
-  # pull_request) so that sonarqube-analysis/release-deploy-plugin below can
-  # depend on it: "Sonar main QG und Plugin Deploy erst nach Gate" per the
-  # brief - same pattern DocComplete's report-megalinter-pr-gate already
-  # uses (event: [pull_request, push, tag]).
+      event: [pull_request]
+      status: [success, failure]
   - name: report-megalinter-pr-gate
     image: registry.chillcode.de/dockerhub-cache/python:3.11-slim
-    depends_on:
-      - report-megalinter-pr
+    volumes: [{name: shared, path: /shared}]
     commands:
-      - sh .chillcode-standards/ci/megalinter-pr-gate.sh .chillcode-quality-reports/megalinter-gate.json
+      - cd /shared/src && sh .chillcode-standards/ci/megalinter-pr-gate.sh .chillcode-quality-reports/megalinter-gate.json
+    depends_on: [report-megalinter-pr]
     when:
-      event:
-        - pull_request
-        - push
-      status:
-        - success
-        - failure
-
+      status: [success, failure]
   - name: report-megalinter-inline-comments
     image: registry.chillcode.de/dockerhub-cache/alpine:3.21
     environment:
       GITEA_ADDRESS: https://git.chillcode.de
       REVIEWDOG_GITEA_API_TOKEN:
         from_secret: drone-reviewdog-pr-gate
-    depends_on:
-      - lint-megalinter-run
+    volumes: [{name: shared, path: /shared}]
     commands:
       - apk add --no-cache curl git >/dev/null
-      - sh .chillcode-standards/ci/post-sarif-inline-comments.sh .chillcode-quality-reports/megalinter-reports/megalinter-report.sarif megalinter
+      - cd /shared/src && sh .chillcode-standards/ci/post-sarif-inline-comments.sh .chillcode-quality-reports/megalinter-reports/megalinter-report.sarif megalinter
+    depends_on: [lint-megalinter]
     when:
-      event:
-        - pull_request
-      status:
-        - success
-        - failure
-
+      event: [pull_request]
+      status: [success, failure]
+  - name: lint-security-fs
+    image: registry.chillcode.de/dockerhub-cache/aquasec/trivy:0.75.0
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs target,node_modules,dist,.cache,.chillcode-standards,.chillcode-quality-reports /shared/src
+    depends_on: [report-megalinter-pr-gate]
+  - name: lint-cancel-build-on-failure
+    image: alpine:3.21
+    environment:
+      CI_CANCEL_TOKEN:
+        from_secret: drone_ci_cancel_token
+    commands:
+      - |
+        set -eu
+        if [ -z "${CI_CANCEL_TOKEN:-}" ]; then
+          echo 'cancel token missing; skipping self-cancel'
+          exit 0
+        fi
+        apk add --no-cache curl >/dev/null
+        curl -fsS -X DELETE -H "Authorization: Bearer ${CI_CANCEL_TOKEN}" \
+          "https://drone.chillcode.de/api/repos/${DRONE_REPO}/builds/${DRONE_BUILD_NUMBER}" || \
+          echo 'self-cancel failed; preserving original lint failure'
+    when:
+      status: [failure]
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+  - name: megalinter-copy
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}/mlsrc' }
+  - name: dockersock
+    host: { path: /var/run/docker.sock }
+---
+kind: pipeline
+type: docker
+name: test
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [prep]
+steps:
+  - name: test-frontend-build
+    image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
+    environment:
+      NPM_CONFIG_REGISTRY: https://artifacts.chillcode.de/npm/npm-virtual/
+      NPM_CONFIG_AUDIT: "false"
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src/frontend
+        npm run build
+  - name: test-backend-verify
+    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src/backend
+        mvn -B -ntp clean verify
+    depends_on: [test-frontend-build]
+  - name: test-converter-regression
+    image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - python3 scripts/tests/test_normalize_mutation_report.py
+      - python3 -m py_compile scripts/mutmut_to_stryker.py
+      - bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
+      - sh -n .ci/deploy.sh .ci/deploy-remote.sh
+    depends_on: [test-backend-verify]
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+---
+kind: pipeline
+type: docker
+name: analysis
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [lint, test]
+steps:
   - name: analysis-sonarqube
     image: registry.chillcode.de/dockerhub-cache/sonarsource/sonar-scanner-cli:12
     environment:
       SONAR_HOST_URL: https://sonar.chillcode.de
       SONAR_TOKEN:
         from_secret: sonar_token
+    volumes: [{name: shared, path: /shared}]
     commands:
       - |
         set -eu
-        test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
-        # SONAR_TOKEN is read from the environment; -Dsonar.token would put it in the process list.
+        test -n "${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
+        cd /shared/src
         sonar-scanner \
-          -Dsonar.host.url="$${SONAR_HOST_URL}" \
+          -Dsonar.host.url="${SONAR_HOST_URL}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
           -Dsonar.projectName='SonarQube Quality Plugin' \
           -Dsonar.sources=backend/src/main/java,frontend/src,scripts \
@@ -211,16 +267,48 @@ steps:
           -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/**,.cache/**,.chillcode-standards/**,.chillcode-quality-reports/** \
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
-          -Dsonar.scm.revision="$${DRONE_COMMIT_SHA}"
-    depends_on:
-      - test-converter-regression
-      - report-megalinter-pr-gate
+          -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
     when:
       ref:
         - refs/heads/master
       event:
         - push
-
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+---
+kind: pipeline
+type: docker
+name: build
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [analysis]
+steps:
+  - name: build-package
+    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src/backend
+        mvn -B -ntp -DskipTests package
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+---
+kind: pipeline
+type: docker
+name: release
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [build]
+steps:
   - name: release-deploy-plugin
     image: registry.chillcode.de/dockerhub-cache/library/alpine:3.21
     environment:
@@ -228,26 +316,37 @@ steps:
         from_secret: sonarqube_plugin_deploy_key
       MUTATION_UPLOAD_TOKEN:
         from_secret: mutation_upload_token
+    volumes: [{name: shared, path: /shared}]
     commands:
-      - sh .ci/deploy.sh
-    depends_on:
-      - analysis-sonarqube
-      - report-megalinter-pr-gate
+      - cd /shared/src && sh .ci/deploy.sh
     when:
       ref:
         - refs/heads/master
       event:
         - push
-
-volumes:
-  - name: dockersock
-    host:
-      path: /var/run/docker.sock
-
 trigger:
-  ref:
-    - refs/heads/master
-    - refs/pull/**
-  event:
-    - pull_request
-    - push
+  branch: [master]
+  event: [push]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
+---
+kind: pipeline
+type: docker
+name: cleanup
+node: { runner: drone-runner }
+clone: { disable: true }
+depends_on: [prep, lint, test, analysis, build, release]
+steps:
+  - name: cleanup-shared
+    image: alpine:3.21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - rm -rf /shared/src /shared/mlsrc /shared/digest /shared/image.tar
+trigger:
+  branch: [master]
+  event: [push, pull_request]
+  status: [success, failure]
+volumes:
+  - name: shared
+    host: { path: '/var/lib/drone-shared/${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}' }
