@@ -107,4 +107,25 @@ public class MutationService {
       LOG.error("Failed to delete report for " + projectKey + "/" + branch, e);
     }
   }
+
+  // Probe method for coverage gate - untested, multiple branches
+  public String probeCoverageGate(String input, int value, boolean flag) {
+    if (input == null) {
+      return "null-input";
+    }
+    if (value < 0) {
+      if (flag) {
+        return "negative-flag-true";
+      } else {
+        return "negative-flag-false";
+      }
+    }
+    if (value > 100) {
+      return "large-value";
+    }
+    if (flag && value % 2 == 0) {
+      return "even-flag-true";
+    }
+    return "default";
+  }
 }
