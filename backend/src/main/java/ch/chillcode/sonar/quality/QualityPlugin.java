@@ -9,14 +9,13 @@ import ch.chillcode.sonar.quality.sensor.MutationSensor;
 import ch.chillcode.sonar.quality.ui.MutationTestingPage;
 import ch.chillcode.sonar.quality.ui.QualityDashboardPage;
 import org.sonar.api.Plugin;
-import java.util.List;
 
 public class QualityPlugin implements Plugin {
 
   @Override
   public void define(Context context) {
     // Custom Metrics
-    context.addExtension(new MutationMetrics());  
+    context.addExtension(new MutationMetrics());
 
     // Services
     context.addExtension(MutationReportParser.class);
