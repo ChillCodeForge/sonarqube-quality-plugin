@@ -9,6 +9,7 @@ import ch.chillcode.sonar.quality.sensor.MutationSensor;
 import ch.chillcode.sonar.quality.ui.MutationTestingPage;
 import ch.chillcode.sonar.quality.ui.QualityDashboardPage;
 import org.sonar.api.Plugin;
+import java.util.List;  // DELIBERATE LINT ERROR: unused import
 
 public class QualityPlugin implements Plugin {
 
