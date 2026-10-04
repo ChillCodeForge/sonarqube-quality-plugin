@@ -12,10 +12,6 @@ steps:
       NPM_CONFIG_AUDIT: "false"
     commands:
       - cd frontend && npm ci
-  - name: prep-install-backend
-    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
-    commands:
-      - mvn -B -ntp -DskipTests -Dspotless.check.skip=true -Dspotbugs.skip=true install -f backend/pom.xml
   - name: prep-development-standards
     image: registry.chillcode.de/dockerhub-cache/alpine/git:2.47.2
     environment:
@@ -44,12 +40,19 @@ steps:
           "git@$GITEA_SSH_HOST:ChillCode/development-standards.git" \
           .chillcode-standards
         git -C .chillcode-standards rev-parse HEAD
+  - name: prep-install-backend
+    image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    commands:
+      # Maven resolves through Artifact Keeper (standards java/maven/settings.xml, #210).
+      - mvn -s .chillcode-standards/java/maven/settings.xml -B -ntp -DskipTests -Dspotless.check.skip=true -Dspotbugs.skip=true install -f backend/pom.xml
+    depends_on: [prep-development-standards]
   - name: prep-sync
     image: alpine:3.21
     volumes: [{name: shared, path: /shared}]
     commands:
       - mkdir -p /shared/src && cp -a . /shared/src
       - mkdir -p /shared/src/.chillcode-standards && cp -a .chillcode-standards/. /shared/src/.chillcode-standards/
+      - cp .chillcode-standards/java/maven/settings.xml /shared/maven-settings.xml
     depends_on: [prep-install-frontend, prep-install-backend, prep-development-standards]
 trigger:
   branch: [main]
@@ -85,7 +88,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -B -ntp spotless:check
+        mvn -s /shared/maven-settings.xml -B -ntp spotless:check
     depends_on: [lint-frontend-static]
   - name: lint-megalinter
     image: registry.chillcode.de/dockerhub-cache/docker:26-cli
@@ -161,6 +164,8 @@ steps:
     image: registry.chillcode.de/dockerhub-cache/aquasec/trivy:0.75.0
     volumes: [{name: shared, path: /shared}]
     commands:
+      # trivy fs resolves POM parents remotely and reads mirrors only from $HOME/.m2/settings.xml.
+      - mkdir -p "$HOME/.m2" && cp /shared/maven-settings.xml "$HOME/.m2/settings.xml"
       - trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs target,node_modules,dist,.cache,.chillcode-standards,.chillcode-quality-reports /shared/src
     depends_on: [report-megalinter-pr-gate]
   - name: lint-cancel-build-on-failure
@@ -217,7 +222,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -B -ntp clean verify
+        mvn -s /shared/maven-settings.xml -B -ntp clean verify
     depends_on: [test-frontend-build]
   - name: test-converter-regression
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
@@ -292,7 +297,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -B -ntp -DskipTests package
+        mvn -s /shared/maven-settings.xml -B -ntp -DskipTests package
 trigger:
   branch: [main]
   event: [push, pull_request]
@@ -340,7 +345,7 @@ steps:
     image: alpine:3.21
     volumes: [{name: shared, path: /shared}]
     commands:
-      - rm -rf /shared/src /shared/mlsrc /shared/digest /shared/image.tar
+      - rm -rf /shared/src /shared/mlsrc /shared/maven-settings.xml /shared/digest /shared/image.tar
 trigger:
   branch: [main]
   event: [push, pull_request]
