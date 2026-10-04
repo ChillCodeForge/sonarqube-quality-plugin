@@ -107,4 +107,20 @@ public class MutationService {
       LOG.error("Failed to delete report for " + projectKey + "/" + branch, e);
     }
   }
+
+  // Probe method for SonarQube quality gate - triggers code smell (empty catch block)
+  public String probeQualityGate(String input) {
+    try {
+      return input.toUpperCase();
+    } catch (Exception ignored) {
+      // Empty catch block - SonarQube rule S1172
+    }
+    return "fallback";
+  }
+
+  // Probe method for security hotspot - hardcoded password pattern
+  public String probeSecurityHotspot() {
+    String password = "admin123"; // SonarQube rule S2068
+    return password;
+  }
 }
