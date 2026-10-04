@@ -52,7 +52,7 @@ steps:
       - mkdir -p /shared/src/.chillcode-standards && cp -a .chillcode-standards/. /shared/src/.chillcode-standards/
     depends_on: [prep-install-frontend, prep-install-backend, prep-development-standards]
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
 volumes:
   - name: shared
@@ -182,7 +182,7 @@ steps:
     when:
       status: [failure]
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
 volumes:
   - name: shared
@@ -232,7 +232,7 @@ steps:
         sh -n .ci/deploy.sh .ci/deploy-remote.sh
     depends_on: [test-backend-verify]
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
 volumes:
   - name: shared
@@ -272,7 +272,7 @@ steps:
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
 volumes:
   - name: shared
@@ -294,7 +294,7 @@ steps:
         cd /shared/src/backend
         mvn -B -ntp -DskipTests package
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
 volumes:
   - name: shared
@@ -319,11 +319,11 @@ steps:
       - cd /shared/src && sh .ci/deploy.sh
     when:
       ref:
-        - refs/heads/master
+        - refs/heads/main
       event:
         - push
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push]
 volumes:
   - name: shared
@@ -342,7 +342,7 @@ steps:
     commands:
       - rm -rf /shared/src /shared/mlsrc /shared/digest /shared/image.tar
 trigger:
-  branch: [master]
+  branch: [main]
   event: [push, pull_request]
   status: [success, failure]
 volumes:
