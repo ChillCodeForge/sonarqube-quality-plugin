@@ -171,12 +171,12 @@ steps:
     commands:
       - |
         set -eu
-        if [ -z "${CI_CANCEL_TOKEN:-}" ]; then
+        if [ -z "$${CI_CANCEL_TOKEN:-}" ]; then
           echo 'cancel token missing; skipping self-cancel'
           exit 0
         fi
         apk add --no-cache curl >/dev/null
-        curl -fsS -X DELETE -H "Authorization: Bearer ${CI_CANCEL_TOKEN}" \
+        curl -fsS -X DELETE -H "Authorization: Bearer $${CI_CANCEL_TOKEN}" \
           "https://drone.chillcode.de/api/repos/${DRONE_REPO}/builds/${DRONE_BUILD_NUMBER}" || \
           echo 'self-cancel failed; preserving original lint failure'
     when:
@@ -255,10 +255,10 @@ steps:
     commands:
       - |
         set -eu
-        test -n "${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
+        test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
         cd /shared/src
         sonar-scanner \
-          -Dsonar.host.url="${SONAR_HOST_URL}" \
+          -Dsonar.host.url="$${SONAR_HOST_URL}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
           -Dsonar.projectName='SonarQube Quality Plugin' \
           -Dsonar.sources=backend/src/main/java,frontend/src,scripts \
