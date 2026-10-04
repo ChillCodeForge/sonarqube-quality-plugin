@@ -223,10 +223,13 @@ steps:
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
     volumes: [{name: shared, path: /shared}]
     commands:
-      - python3 scripts/tests/test_normalize_mutation_report.py
-      - python3 -m py_compile scripts/mutmut_to_stryker.py
-      - bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
-      - sh -n .ci/deploy.sh .ci/deploy-remote.sh
+      - |
+        set -eu
+        cd /shared/src
+        python3 scripts/tests/test_normalize_mutation_report.py
+        python3 -m py_compile scripts/mutmut_to_stryker.py
+        bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
+        sh -n .ci/deploy.sh .ci/deploy-remote.sh
     depends_on: [test-backend-verify]
 trigger:
   branch: [master]
