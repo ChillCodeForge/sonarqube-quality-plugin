@@ -27,7 +27,7 @@ profile:
   risk: elevated
 
 coverage:
-  newCodeMinimum: 0
+  newCodeMinimum: 80
 
 megalinter:
   # v9.4.0's TYPESCRIPT_ES/JAVASCRIPT_ES descriptor passes --no-eslintrc, which
@@ -41,4 +41,4 @@ megalinter:
   osvScannerVersion: v2.2.3
 
 standards:
-  ref: standards-v1.2.4
+  ref: standards-v1.2.6

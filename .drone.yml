@@ -262,6 +262,7 @@ steps:
         set -eu
         test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
         cd /shared/src
+        test -s backend/target/site/jacoco/jacoco.xml
         sonar-scanner \
           -Dsonar.host.url="$${SONAR_HOST_URL}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
@@ -276,6 +277,36 @@ steps:
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
+  - name: analysis-coverage-new-code
+    image: registry.chillcode.de/dockerhub-cache/library/python:3.14
+    environment:
+      PIP_INDEX_URL: https://artifacts.chillcode.de/pypi/pypi-virtual/simple/
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - |
+        set -eu
+        cd /shared/src
+        test -s backend/target/site/jacoco/jacoco.xml
+        pip install --no-cache-dir --quiet 'diff-cover==10.5.1' 'PyYAML==6.0.3'
+        MINIMUM=$(python3 -c 'import yaml; value = yaml.safe_load(open(".quality.yaml"))["coverage"]["newCodeMinimum"]; assert type(value) is int and 0 < value <= 100; print(value)')
+        TARGET="$${DRONE_TARGET_BRANCH:-main}"
+        attempt=1
+        until git fetch --no-tags --quiet origin "+refs/heads/$${TARGET}:refs/remotes/origin/$${TARGET}"; do
+          if [ "$${attempt}" -ge 3 ]; then
+            echo "Could not fetch the target branch $${TARGET}." >&2
+            exit 1
+          fi
+          attempt=$$((attempt + 1))
+          sleep 5
+        done
+        # JaCoCo uses package-relative source names; map them to the Git root.
+        diff-cover backend/target/site/jacoco/jacoco.xml \
+          --src-roots backend/src/main/java \
+          --compare-branch="origin/$${TARGET}" \
+          --fail-under="$${MINIMUM}"
+    depends_on: [analysis-sonarqube]
+    when:
+      event: [pull_request]
 trigger:
   branch: [main]
   event: [push, pull_request]
