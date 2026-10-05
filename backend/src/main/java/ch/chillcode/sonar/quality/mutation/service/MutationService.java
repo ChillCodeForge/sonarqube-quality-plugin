@@ -23,6 +23,10 @@ public class MutationService {
     this.storageService = storageService;
   }
 
+  public static int coverageProbe(int value) {
+    return Math.incrementExact(value);
+  }
+
   public void processReport(File reportFile, SensorContext context) {
     try {
       NormalizedMutationReport report = parser.parse(reportFile);
