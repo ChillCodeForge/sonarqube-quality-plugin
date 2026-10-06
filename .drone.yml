@@ -42,9 +42,13 @@ steps:
         git -C .chillcode-standards rev-parse HEAD
   - name: prep-install-backend
     image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
+    volumes: [{name: shared, path: /shared}]
     commands:
-      # Maven resolves through Artifact Keeper (standards java/maven/settings.xml, #210).
-      - mvn -s .chillcode-standards/java/maven/settings.xml -B -ntp -DskipTests -Dspotless.check.skip=true -Dspotbugs.skip=true install -f backend/pom.xml
+      # Resolve dependencies/plugins only; all Maven steps share dependency paths
+      # and timestamps so packaging reuses the test stage's compiled classes.
+      - mkdir -p /shared/m2
+      - cp .chillcode-standards/java/maven/settings.xml /shared/maven-settings.xml
+      - mvn -s /shared/maven-settings.xml -B -ntp -Dmaven.repo.local=/shared/m2 org.apache.maven.plugins:maven-dependency-plugin:3.8.1:go-offline -f backend/pom.xml
     depends_on: [prep-development-standards]
   - name: prep-sync
     image: alpine:3.21
@@ -88,7 +92,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -s /shared/maven-settings.xml -B -ntp spotless:check
+        mvn -s /shared/maven-settings.xml -B -ntp -Dmaven.repo.local=/shared/m2 spotless:check
     depends_on: [lint-frontend-static]
   - name: lint-megalinter
     image: registry.chillcode.de/dockerhub-cache/docker:26-cli
@@ -222,7 +226,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -s /shared/maven-settings.xml -B -ntp clean verify
+        mvn -s /shared/maven-settings.xml -B -ntp -Dmaven.repo.local=/shared/m2 verify
     depends_on: [test-frontend-build]
   - name: test-converter-regression
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
@@ -328,7 +332,7 @@ steps:
       - |
         set -eu
         cd /shared/src/backend
-        mvn -s /shared/maven-settings.xml -B -ntp -DskipTests package
+        mvn -s /shared/maven-settings.xml -B -ntp -Dmaven.repo.local=/shared/m2 -DskipTests package
 trigger:
   branch: [main]
   event: [push, pull_request]
