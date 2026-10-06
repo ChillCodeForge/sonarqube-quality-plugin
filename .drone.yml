@@ -169,6 +169,7 @@ steps:
       - trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs target,node_modules,dist,.cache,.chillcode-standards,.chillcode-quality-reports /shared/src
     depends_on: [report-megalinter-pr-gate]
   - name: lint-cancel-build-on-failure
+    depends_on: [lint-security-fs, report-megalinter-gitea-comment, report-megalinter-inline-comments]
     image: alpine:3.21
     environment:
       CI_CANCEL_TOKEN:
