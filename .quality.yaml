@@ -41,4 +41,4 @@ megalinter:
   osvScannerVersion: v2.2.3
 
 standards:
-  ref: standards-v1.2.7
+  ref: standards-v1.2.8
