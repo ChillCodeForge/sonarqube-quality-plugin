@@ -3,7 +3,6 @@ kind: pipeline
 type: docker
 name: prep
 clone: { depth: 0 }
-node: { runner: drone-runner }
 steps:
   - name: prep-install-frontend
     image: registry.chillcode.de/dockerhub-cache/library/node:22.23.1-bookworm-slim
@@ -68,7 +67,6 @@ volumes:
 kind: pipeline
 type: docker
 name: lint
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [prep]
 steps:
@@ -166,6 +164,9 @@ steps:
       status: [success, failure]
   - name: lint-security-fs
     image: registry.chillcode.de/dockerhub-cache/aquasec/trivy:0.75.0
+    environment:
+      TRIVY_DB_REPOSITORY: registry.chillcode.de/ghcr-cache/aquasecurity/trivy-db:2
+      TRIVY_JAVA_DB_REPOSITORY: registry.chillcode.de/ghcr-cache/aquasecurity/trivy-java-db:1
     volumes: [{name: shared, path: /shared}]
     commands:
       # trivy fs resolves POM parents remotely and reads mirrors only from $HOME/.m2/settings.xml.
@@ -205,7 +206,6 @@ volumes:
 kind: pipeline
 type: docker
 name: test
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [prep]
 steps:
@@ -251,7 +251,6 @@ volumes:
 kind: pipeline
 type: docker
 name: analysis
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [lint, test]
 steps:
@@ -322,7 +321,6 @@ volumes:
 kind: pipeline
 type: docker
 name: build
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [analysis]
 steps:
@@ -344,7 +342,6 @@ volumes:
 kind: pipeline
 type: docker
 name: release
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [build]
 steps:
@@ -373,7 +370,6 @@ volumes:
 kind: pipeline
 type: docker
 name: cleanup
-node: { runner: drone-runner }
 clone: { disable: true }
 depends_on: [prep, lint, test, analysis, build, release]
 steps:
