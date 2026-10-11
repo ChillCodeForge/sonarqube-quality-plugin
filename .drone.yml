@@ -267,7 +267,15 @@ steps:
         test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
         cd /shared/src
         test -s backend/target/site/jacoco/jacoco.xml
+        # Pull requests are analysed as pull requests (Haembina Branch Analysis
+        # plugin on sonar.chillcode.de); without these keys a PR scan overwrites
+        # main's analysis. The plugin has no Drone auto-configuration.
+        PR_ARGS=""
+        if [ -n "$${DRONE_PULL_REQUEST:-}" ]; then
+          PR_ARGS="-Dsonar.pullrequest.key=$${DRONE_PULL_REQUEST} -Dsonar.pullrequest.branch=$${DRONE_SOURCE_BRANCH} -Dsonar.pullrequest.base=$${DRONE_TARGET_BRANCH}"
+        fi
         sonar-scanner \
+          $${PR_ARGS} \
           -Dsonar.host.url="$${SONAR_HOST_URL}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
           -Dsonar.projectName='SonarQube Quality Plugin' \
@@ -281,6 +289,32 @@ steps:
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
+  # Adds the Sonar result to the existing ChillCode Quality Report PR comment
+  # (one summary comment; reviewdog keeps the inline comments). Also on a red gate.
+  - name: report-sonarqube-gitea-comment
+    image: registry.chillcode.de/dockerhub-cache/alpine:3.21
+    environment:
+      GITEA_ADDRESS: https://git.chillcode.de
+      REVIEWDOG_GITEA_API_TOKEN:
+        from_secret: drone-reviewdog-pr-gate
+      SONAR_HOST_URL: https://sonar.chillcode.de
+      SONAR_TOKEN:
+        from_secret: sonar_token
+    depends_on: [analysis-sonarqube]
+    volumes:
+      - name: shared
+        path: /shared
+    commands:
+      - cd /shared/src
+      - apk add --no-cache curl jq >/dev/null
+      - sh .chillcode-standards/ci/sonar-pr-summary.sh sonarqube-quality-plugin "$DRONE_PULL_REQUEST" megalinter-pr-report.md
+      - sh .chillcode-standards/ci/update-gitea-pr-comment.sh "$DRONE_REPO" "$DRONE_PULL_REQUEST" megalinter-pr-report.md
+    when:
+      event:
+        - pull_request
+      status:
+        - success
+        - failure
   - name: analysis-coverage-new-code
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14
     environment:
