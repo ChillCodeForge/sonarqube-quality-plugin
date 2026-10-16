@@ -171,7 +171,7 @@ steps:
     commands:
       # trivy fs resolves POM parents remotely and reads mirrors only from $HOME/.m2/settings.xml.
       - mkdir -p "$HOME/.m2" && cp /shared/maven-settings.xml "$HOME/.m2/settings.xml"
-      - trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs target,node_modules,dist,.cache,.chillcode-standards,.chillcode-quality-reports /shared/src
+      - trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs target,**/target,node_modules,dist,.cache,.chillcode-standards,.chillcode-quality-reports /shared/src
     depends_on: [report-megalinter-pr-gate]
   - name: lint-cancel-build-on-failure
     depends_on: [lint-security-fs, report-megalinter-gitea-comment, report-megalinter-inline-comments]
