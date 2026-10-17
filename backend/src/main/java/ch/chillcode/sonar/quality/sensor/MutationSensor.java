@@ -19,8 +19,8 @@ public class MutationSensor implements Sensor {
   private static final Logger LOG = Loggers.get(MutationSensor.class);
 
   private final Configuration config;
+  private final MutationService mutationService = new MutationService();
   private MutationReportStorageService storageService;
-  private MutationService mutationService;
 
   // SonarQube's Spring-based DI only injects dependencies declared as
   // constructor parameters for Sensor extensions - a no-arg constructor
@@ -32,12 +32,10 @@ public class MutationSensor implements Sensor {
   public MutationSensor(Configuration config) {
     this.config = config;
     this.storageService = new MutationReportStorageService();
-    this.mutationService = new MutationService(this.storageService);
   }
 
   public void setMutationReportStorageService(MutationReportStorageService storageService) {
     this.storageService = storageService;
-    this.mutationService = new MutationService(storageService);
   }
 
   @Override

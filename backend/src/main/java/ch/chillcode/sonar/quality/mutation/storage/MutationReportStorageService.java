@@ -105,7 +105,6 @@ public class MutationReportStorageService {
   }
 
   public NormalizedMutationReport loadReport(String projectKey, String branch) throws IOException {
-    ensureStorageDirectory();
     Path reportFile =
         storageRoot.resolve(sanitize(projectKey)).resolve(sanitize(branch)).resolve(FILE_NAME);
 
@@ -119,7 +118,6 @@ public class MutationReportStorageService {
   }
 
   public void deleteReport(String projectKey, String branch) throws IOException {
-    ensureStorageDirectory();
     Path projectDir = storageRoot.resolve(sanitize(projectKey)).resolve(sanitize(branch));
     Path reportFile = projectDir.resolve(FILE_NAME);
     Files.deleteIfExists(reportFile);
@@ -134,6 +132,9 @@ public class MutationReportStorageService {
   }
 
   public void cleanupOldPRReports() {
+    if (!Files.isDirectory(storageRoot)) {
+      return;
+    }
     try {
       Files.walk(storageRoot)
           .filter(Files::isRegularFile)

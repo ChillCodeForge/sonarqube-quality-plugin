@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality.mutation.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -84,6 +85,21 @@ class MutationReportStorageServiceTest {
     MutationReportStorageService storage = new MutationReportStorageService(config);
 
     assertNull(storage.loadReport("nonexistent", "main"));
+  }
+
+  @Test
+  void readingAMissingRootCreatesNothing(@TempDir Path tempDir) throws IOException {
+    Path root = tempDir.resolve("absent");
+    Configuration config = mock(Configuration.class);
+    when(config.get("chillcode.mutation.storage")).thenReturn(Optional.of(root.toString()));
+    MutationReportStorageService storage = new MutationReportStorageService(config);
+    Files.delete(root);
+
+    assertNull(storage.loadReport("my-project", "main"));
+    storage.deleteReport("my-project", "main");
+    storage.cleanupOldPRReports();
+
+    assertFalse(Files.exists(root));
   }
 
   @Test

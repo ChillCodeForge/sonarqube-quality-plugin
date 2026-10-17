@@ -3,34 +3,25 @@ package ch.chillcode.sonar.quality.mutation.service;
 import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
-import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.File;
-import java.util.Optional;
 import org.sonar.api.batch.sensor.SensorContext;
 import org.sonar.api.measures.Metric;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
 
+/**
+ * Scanner-side: turns a mutation report into measures on the analysed project. It never touches the
+ * report storage, which lives on the SonarQube server and is filled only by the upload API.
+ */
 public class MutationService {
 
   private static final Logger LOG = Loggers.get(MutationService.class);
 
-  private final MutationReportParser parser;
-  private final MutationReportStorageService storageService;
-
-  public MutationService(MutationReportStorageService storageService) {
-    this.parser = new MutationReportParser();
-    this.storageService = storageService;
-  }
+  private final MutationReportParser parser = new MutationReportParser();
 
   public void processReport(File reportFile, SensorContext context) {
     try {
       NormalizedMutationReport report = parser.parse(reportFile);
-
-      // Store full report
-      storageService.storeReport(report);
-
-      // Write measures
       writeMeasures(report, context);
 
       LOG.info(
@@ -44,10 +35,9 @@ public class MutationService {
     }
   }
 
-  // Same as processReport() but for a report that was already parsed and
-  // persisted (loaded back from storage) - used by MutationSensor's
-  // primary path, where the report arrived earlier via the upload REST
-  // API rather than as a local file the scanner can read.
+  // Same as processReport() but for a report that is already parsed (loaded
+  // back from storage) - used by MutationSensor's primary path, where the
+  // report arrived earlier via the upload REST API.
   public void publishMeasures(NormalizedMutationReport report, SensorContext context) {
     try {
       writeMeasures(report, context);
@@ -89,22 +79,5 @@ public class MutationService {
 
   private void saveMeasure(SensorContext context, Metric metric, String value) {
     context.newMeasure().forMetric(metric).withValue(value).save();
-  }
-
-  public Optional<NormalizedMutationReport> getStoredReport(String projectKey, String branch) {
-    try {
-      return Optional.ofNullable(storageService.loadReport(projectKey, branch));
-    } catch (Exception e) {
-      LOG.error("Failed to load stored report for " + projectKey + "/" + branch, e);
-      return Optional.empty();
-    }
-  }
-
-  public void deleteReport(String projectKey, String branch) {
-    try {
-      storageService.deleteReport(projectKey, branch);
-    } catch (Exception e) {
-      LOG.error("Failed to delete report for " + projectKey + "/" + branch, e);
-    }
   }
 }

@@ -165,6 +165,31 @@
                 </executions>
             </plugin>
 
+            <!-- Byte Buddy's agent (what Mockito's inline mock maker needs) at
+                 JVM start instead of a runtime self-attach: the self-attach
+                 crashed the test JVM in CI when MutationSensorTest ran
+                 first, and future JDKs disallow it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <argLine>@{argLine} -javaagent:@{net.bytebuddy:byte-buddy-agent:jar}</argLine>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
