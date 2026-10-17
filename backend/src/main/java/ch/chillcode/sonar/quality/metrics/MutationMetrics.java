@@ -71,6 +71,17 @@ public class MutationMetrics implements Metrics {
           .setDomain(DOMAIN)
           .create();
 
+  // Internal: the branch whose uploaded report belongs to this analysis. Only
+  // the scanner knows what it analyses; the Compute Engine API does not, so
+  // the MutationSensor hands it to the MutationMeasureComputer this way.
+  public static final Metric MUTATION_REPORT_BRANCH =
+      new Metric.Builder(
+              "mutation_report_branch", "Mutation Report Branch", Metric.ValueType.STRING)
+          .setDescription("Branch whose uploaded mutation report this analysis publishes")
+          .setDomain(DOMAIN)
+          .setHidden(true)
+          .create();
+
   @Override
   public List<Metric> getMetrics() {
     return Arrays.asList(
@@ -83,6 +94,7 @@ public class MutationMetrics implements Metrics {
         MUTATION_IGNORED,
         MUTATION_DURATION,
         MUTATION_TOOL,
-        MUTATION_LANGUAGE);
+        MUTATION_LANGUAGE,
+        MUTATION_REPORT_BRANCH);
   }
 }

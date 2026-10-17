@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,13 +44,18 @@ class MutationSensorTest {
   @TempDir Path tempDir;
   private Configuration config;
   private SensorContext context;
-  private NewMeasure<?> measure;
+
+  @SuppressWarnings("rawtypes")
+  private NewMeasure measure;
+
   private MutationSensor sensor;
 
   @BeforeEach
   void setUp() {
     config = mock(Configuration.class);
     when(config.get("sonar.chillcode.mutationReport")).thenReturn(Optional.empty());
+    when(config.get("sonar.branch.name")).thenReturn(Optional.empty());
+    when(config.get("sonar.pullrequest.key")).thenReturn(Optional.empty());
 
     context = mock(SensorContext.class, RETURNS_DEEP_STUBS);
     measure = mock(NewMeasure.class, RETURNS_SELF);
@@ -59,7 +65,27 @@ class MutationSensorTest {
   }
 
   @Test
-  void withoutLocalReportPublishesNothing() {
+  void withoutLocalReportRecordsOnlyTheReportBranch() {
+    sensor.execute(context);
+
+    verify(measure).forMetric(MutationMetrics.MUTATION_REPORT_BRANCH);
+    verify(measure).withValue("main");
+    verify(measure, times(1)).save();
+  }
+
+  @Test
+  void recordsTheAnalysedBranch() {
+    when(config.get("sonar.branch.name")).thenReturn(Optional.of("feature-x"));
+
+    sensor.execute(context);
+
+    verify(measure).withValue("feature-x");
+  }
+
+  @Test
+  void pullRequestRecordsNoReportBranch() {
+    when(config.get("sonar.pullrequest.key")).thenReturn(Optional.of("42"));
+
     sensor.execute(context);
 
     verify(context, never()).newMeasure();
@@ -72,6 +98,6 @@ class MutationSensorTest {
 
     sensor.execute(context);
 
-    verify(measure, times(9)).save();
+    verify(measure, times(10)).save(); // 9 mutation measures + report branch
   }
 }

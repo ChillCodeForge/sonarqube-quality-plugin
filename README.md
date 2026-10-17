@@ -75,9 +75,9 @@ printf 'Authorization: Bearer %s\n' "$MUTATION_UPLOAD_TOKEN" | curl --fail --sil
 
 Use the target SonarQube server's configured authentication policy and keep credentials out of source code and logs.
 
-A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures: the server's Compute Engine reads the report while processing the analysis. Only the `main` report becomes measures; reports uploaded for other branches are stored and shown on the Mutation Testing page while that branch is selected, but no analysis publishes them.
+A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures: the server's Compute Engine reads the report while processing the analysis. Each branch analysis publishes the report uploaded for that branch (`sonar.branch.name`, `main` when unset); a branch without an upload gets no mutation measures. Pull request analyses get none, because uploads are per branch.
 
-When the scanner runs in the same job that produced the report, `sonar.chillcode.mutationReport` can instead point the scanner-side sensor at the local report file. For that analysis the local report takes precedence over a stored one. That sensor runs only for Java, JavaScript, TypeScript and Python projects.
+When the scanner runs in the same job that produced the report, `sonar.chillcode.mutationReport` can instead point the scanner-side sensor at the local report file. For that analysis the local report takes precedence over a stored one.
 
 ### Stryker
 

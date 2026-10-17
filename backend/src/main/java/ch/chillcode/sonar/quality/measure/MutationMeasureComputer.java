@@ -4,6 +4,7 @@ import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import org.sonar.api.ce.measure.Component;
+import org.sonar.api.ce.measure.Measure;
 import org.sonar.api.ce.measure.MeasureComputer;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
@@ -34,6 +35,7 @@ public class MutationMeasureComputer implements MeasureComputer {
   public MeasureComputerDefinition define(MeasureComputerDefinitionContext defContext) {
     return defContext
         .newDefinitionBuilder()
+        .setInputMetrics(MutationMetrics.MUTATION_REPORT_BRANCH.getKey())
         .setOutputMetrics(
             MutationMetrics.MUTATION_SCORE.getKey(),
             MutationMetrics.MUTATION_TOTAL.getKey(),
@@ -63,10 +65,16 @@ public class MutationMeasureComputer implements MeasureComputer {
           "Mutation measures for {} came from the scanner, skipping stored report", projectKey);
       return;
     }
+    Measure branchMeasure = context.getMeasure(MutationMetrics.MUTATION_REPORT_BRANCH.getKey());
+    if (branchMeasure == null) {
+      LOG.info("Analysis of {} has no report branch (pull request), skipping", projectKey);
+      return;
+    }
+    String branch = branchMeasure.getStringValue();
     try {
-      NormalizedMutationReport report = storageService.loadReport(projectKey, "main");
+      NormalizedMutationReport report = storageService.loadReport(projectKey, branch);
       if (report == null) {
-        LOG.info("No stored mutation report for {}, skipping measure computation", projectKey);
+        LOG.info("No stored mutation report for {} on {}, skipping", projectKey, branch);
         return;
       }
 

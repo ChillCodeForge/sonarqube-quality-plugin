@@ -33,7 +33,13 @@ class MutationMeasureComputerTest {
     when(context.getMeasure(anyString())).thenReturn(null); // deep stubs would invent one
     NormalizedMutationReport report = new NormalizedMutationReport();
     report.setSummary(new NormalizedMutationReport.MutationSummary());
-    when(storage.loadReport("my-project", "main")).thenReturn(report);
+    when(storage.loadReport("my-project", "feature-x")).thenReturn(report);
+  }
+
+  private void analysedBranch(String branch) {
+    Measure measure = mock(Measure.class);
+    when(measure.getStringValue()).thenReturn(branch);
+    when(context.getMeasure(MutationMetrics.MUTATION_REPORT_BRANCH.getKey())).thenReturn(measure);
   }
 
   private long addMeasureCalls() {
@@ -43,10 +49,31 @@ class MutationMeasureComputerTest {
   }
 
   @Test
-  void publishesTheStoredReport() {
+  void publishesTheReportOfTheAnalysedBranch() {
+    analysedBranch("feature-x");
+
     computer.compute(context);
 
     assertEquals(7, addMeasureCalls());
+  }
+
+  @Test
+  void aBranchWithoutUploadGetsNoMeasures() throws IOException {
+    analysedBranch("other");
+
+    computer.compute(context);
+
+    verify(storage).loadReport("my-project", "other");
+    assertEquals(0, addMeasureCalls());
+  }
+
+  // The sensor records no branch for a pull request.
+  @Test
+  void anAnalysisWithoutReportBranchGetsNoMeasures() throws IOException {
+    computer.compute(context);
+
+    verify(storage, never()).loadReport(anyString(), anyString());
+    assertEquals(0, addMeasureCalls());
   }
 
   @Test
@@ -68,6 +95,7 @@ class MutationMeasureComputerTest {
   // already published for this analysis must not be overwritten.
   @Test
   void leavesMeasuresFromTheScannerAlone() throws IOException {
+    analysedBranch("feature-x");
     when(context.getMeasure(MutationMetrics.MUTATION_SCORE.getKey()))
         .thenReturn(mock(Measure.class));
 

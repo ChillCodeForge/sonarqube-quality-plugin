@@ -1,5 +1,6 @@
 package ch.chillcode.sonar.quality.sensor;
 
+import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import ch.chillcode.sonar.quality.mutation.service.MutationService;
 import java.io.File;
 import java.nio.file.Files;
@@ -32,13 +33,15 @@ public class MutationSensor implements Sensor {
 
   @Override
   public void describe(SensorDescriptor descriptor) {
+    // Every analysis: the branch hand-off below is needed whatever the
+    // project's language, and so is a local report from any supported tool.
     descriptor.name("ChillCode Mutation Testing Sensor");
-    // Only run on projects that have mutation testing configured
-    descriptor.onlyOnLanguages("java", "ts", "tsx", "js", "jsx", "py");
   }
 
   @Override
   public void execute(SensorContext context) {
+    recordReportBranch(context);
+
     // Reports uploaded via POST /api/chillcode_mutation/upload live on the
     // server, which this scanner-side sensor cannot see; the
     // MutationMeasureComputer publishes those. This sensor handles only a
@@ -62,5 +65,20 @@ public class MutationSensor implements Sensor {
     } catch (Exception e) {
       LOG.error("Failed to process mutation report: " + reportPath, e);
     }
+  }
+
+  // Tells the MutationMeasureComputer which uploaded report belongs to this
+  // analysis. A pull request has none of its own: uploads are per branch, and
+  // a PR showing its target branch's score would misattribute it.
+  private void recordReportBranch(SensorContext context) {
+    if (config.get("sonar.pullrequest.key").isPresent()) {
+      return;
+    }
+    String branch = config.get("sonar.branch.name").orElse("main");
+    context
+        .<String>newMeasure()
+        .forMetric(MutationMetrics.MUTATION_REPORT_BRANCH)
+        .withValue(branch)
+        .save();
   }
 }
