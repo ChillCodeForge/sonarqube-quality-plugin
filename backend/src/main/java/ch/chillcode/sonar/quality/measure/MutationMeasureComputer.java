@@ -20,7 +20,15 @@ public class MutationMeasureComputer implements MeasureComputer {
 
   private static final Logger LOG = Loggers.get(MutationMeasureComputer.class);
 
-  private final MutationReportStorageService storageService = new MutationReportStorageService();
+  private final MutationReportStorageService storageService;
+
+  public MutationMeasureComputer() {
+    this(new MutationReportStorageService());
+  }
+
+  MutationMeasureComputer(MutationReportStorageService storageService) {
+    this.storageService = storageService;
+  }
 
   @Override
   public MeasureComputerDefinition define(MeasureComputerDefinitionContext defContext) {
@@ -48,6 +56,13 @@ public class MutationMeasureComputer implements MeasureComputer {
     }
 
     String projectKey = context.getComponent().getKey();
+    // The scanner's MutationSensor already published a local report for this
+    // very analysis; it wins, and SonarQube refuses a second measure anyway.
+    if (context.getMeasure(MutationMetrics.MUTATION_SCORE.getKey()) != null) {
+      LOG.info(
+          "Mutation measures for {} came from the scanner, skipping stored report", projectKey);
+      return;
+    }
     try {
       NormalizedMutationReport report = storageService.loadReport(projectKey, "main");
       if (report == null) {

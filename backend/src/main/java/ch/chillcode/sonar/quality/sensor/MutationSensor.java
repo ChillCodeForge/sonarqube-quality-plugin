@@ -1,8 +1,6 @@
 package ch.chillcode.sonar.quality.sensor;
 
-import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.service.MutationService;
-import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,22 +18,16 @@ public class MutationSensor implements Sensor {
 
   private final Configuration config;
   private final MutationService mutationService = new MutationService();
-  private MutationReportStorageService storageService;
 
   // SonarQube's Spring-based DI only injects dependencies declared as
   // constructor parameters for Sensor extensions - a no-arg constructor
   // plus a manual setConfiguration()/etc. is never called automatically,
-  // so config/storageService stayed null and every analysis run that
+  // so config stayed null and every analysis run that
   // reached this sensor crashed with a NullPointerException (confirmed:
   // it aborted sonarqube-analysis for every project running our plugin,
   // not just ones using mutation testing).
   public MutationSensor(Configuration config) {
     this.config = config;
-    this.storageService = new MutationReportStorageService();
-  }
-
-  public void setMutationReportStorageService(MutationReportStorageService storageService) {
-    this.storageService = storageService;
   }
 
   @Override
@@ -47,39 +39,13 @@ public class MutationSensor implements Sensor {
 
   @Override
   public void execute(SensorContext context) {
-    String projectKey = context.project().key();
-    String branch = config.get("sonar.branch.name").orElse("main");
-
-    // Primary path: a report already uploaded via
-    // POST /api/chillcode_mutation/upload (typically by a separate,
-    // weekly mutation-testing CI job) and sitting in our own storage.
-    // This is how mutation data actually reaches SonarQube in
-    // practice - the scanner container running THIS sensor rarely has
-    // a local mutation report file, since mutation testing is its own
-    // slow job that runs on a different schedule (see nutrition's
-    // .drone.yml mutation-testing pipeline, 1-2x/week).
-    try {
-      NormalizedMutationReport stored = storageService.loadReport(projectKey, branch);
-      if (stored != null) {
-        LOG.info(
-            "Publishing stored mutation report as measures: project={}, branch={}, score={}",
-            projectKey,
-            branch,
-            stored.getSummary().getScore());
-        mutationService.publishMeasures(stored, context);
-        return;
-      }
-    } catch (Exception e) {
-      LOG.error("Failed to load stored mutation report for measures: " + projectKey, e);
-    }
-
-    // Fallback path: sonar.chillcode.mutationReport points at a local
-    // file (e.g. the scanner runs in the same job that produced the
-    // report, no separate upload step).
+    // Reports uploaded via POST /api/chillcode_mutation/upload live on the
+    // server, which this scanner-side sensor cannot see; the
+    // MutationMeasureComputer publishes those. This sensor handles only a
+    // local file, for a scanner running in the job that produced the report.
     String reportPath = config.get("sonar.chillcode.mutationReport").orElse(null);
     if (reportPath == null || reportPath.isEmpty()) {
-      LOG.info(
-          "No stored mutation report and no sonar.chillcode.mutationReport configured - skipping");
+      LOG.info("No sonar.chillcode.mutationReport configured - skipping");
       return;
     }
 
