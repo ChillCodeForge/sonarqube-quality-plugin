@@ -68,6 +68,7 @@ class MutationSensorTest {
   void withoutLocalReportRecordsOnlyTheReportBranch() {
     sensor.execute(context);
 
+    verify(measure).on(context.project());
     verify(measure).forMetric(MutationMetrics.MUTATION_REPORT_BRANCH);
     verify(measure).withValue("main");
     verify(measure, times(1)).save();
@@ -79,6 +80,7 @@ class MutationSensorTest {
 
     sensor.execute(context);
 
+    verify(measure).on(context.project());
     verify(measure).withValue("feature-x");
   }
 

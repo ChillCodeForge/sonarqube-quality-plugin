@@ -77,6 +77,7 @@ public class MutationSensor implements Sensor {
     String branch = config.get("sonar.branch.name").orElse("main");
     context
         .<String>newMeasure()
+        .on(context.project())
         .forMetric(MutationMetrics.MUTATION_REPORT_BRANCH)
         .withValue(branch)
         .save();
