@@ -1,7 +1,9 @@
 package ch.chillcode.sonar.quality.sensor;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -101,5 +103,21 @@ class MutationSensorTest {
     sensor.execute(context);
 
     verify(measure, times(10)).save(); // 9 mutation measures + report branch
+  }
+
+  @Test
+  void aFailingMeasureNeverAbortsTheAnalysis() {
+    doThrow(new NullPointerException("component is null")).when(measure).save();
+
+    assertDoesNotThrow(() -> sensor.execute(context));
+  }
+
+  @Test
+  void anUnreadableLocalReportNeverAbortsTheAnalysis() throws IOException {
+    Path report = Files.writeString(tempDir.resolve("mutations.xml"), "not a report");
+    when(config.get("sonar.chillcode.mutationReport")).thenReturn(Optional.of(report.toString()));
+
+    assertDoesNotThrow(() -> sensor.execute(context));
+    verify(measure, times(1)).save(); // only the report branch, no mutation measures
   }
 }

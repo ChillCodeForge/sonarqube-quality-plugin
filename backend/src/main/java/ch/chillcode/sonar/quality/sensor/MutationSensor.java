@@ -3,6 +3,7 @@ package ch.chillcode.sonar.quality.sensor;
 import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import ch.chillcode.sonar.quality.mutation.service.MutationService;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,12 +41,21 @@ public class MutationSensor implements Sensor {
 
   @Override
   public void execute(SensorContext context) {
-    recordReportBranch(context);
+    // Mutation measures are an add-on: whatever fails here must cost only
+    // those measures, never the project's analysis.
+    try {
+      recordReportBranch(context);
+      publishLocalReport(context);
+    } catch (Exception e) {
+      LOG.error("Mutation sensor failed; analysis continues without mutation measures", e);
+    }
+  }
 
-    // Reports uploaded via POST /api/chillcode_mutation/upload live on the
-    // server, which this scanner-side sensor cannot see; the
-    // MutationMeasureComputer publishes those. This sensor handles only a
-    // local file, for a scanner running in the job that produced the report.
+  // Reports uploaded via POST /api/chillcode_mutation/upload live on the
+  // server, which this scanner-side sensor cannot see; the
+  // MutationMeasureComputer publishes those. This sensor handles only a
+  // local file, for a scanner running in the job that produced the report.
+  private void publishLocalReport(SensorContext context) throws IOException {
     String reportPath = config.get("sonar.chillcode.mutationReport").orElse(null);
     if (reportPath == null || reportPath.isEmpty()) {
       LOG.info("No sonar.chillcode.mutationReport configured - skipping");
@@ -58,13 +68,9 @@ public class MutationSensor implements Sensor {
       return;
     }
 
-    try {
-      File reportFile = reportFilePath.toFile();
-      LOG.info("Processing mutation report: {}", reportFile.getAbsolutePath());
-      mutationService.processReport(reportFile, context);
-    } catch (Exception e) {
-      LOG.error("Failed to process mutation report: " + reportPath, e);
-    }
+    File reportFile = reportFilePath.toFile();
+    LOG.info("Processing mutation report: {}", reportFile.getAbsolutePath());
+    mutationService.processReport(reportFile, context);
   }
 
   // Tells the MutationMeasureComputer which uploaded report belongs to this
@@ -75,11 +81,6 @@ public class MutationSensor implements Sensor {
       return;
     }
     String branch = config.get("sonar.branch.name").orElse("main");
-    context
-        .<String>newMeasure()
-        .on(context.project())
-        .forMetric(MutationMetrics.MUTATION_REPORT_BRANCH)
-        .withValue(branch)
-        .save();
+    MutationService.saveProjectMeasure(context, MutationMetrics.MUTATION_REPORT_BRANCH, branch);
   }
 }

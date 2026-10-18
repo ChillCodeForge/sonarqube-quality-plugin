@@ -4,6 +4,8 @@ import ch.chillcode.sonar.quality.metrics.MutationMetrics;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
 import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
 import org.sonar.api.batch.sensor.SensorContext;
 import org.sonar.api.measures.Metric;
 import org.sonar.api.utils.log.Logger;
@@ -19,48 +21,40 @@ public class MutationService {
 
   private final MutationReportParser parser = new MutationReportParser();
 
-  public void processReport(File reportFile, SensorContext context) {
-    try {
-      NormalizedMutationReport report = parser.parse(reportFile);
-      writeMeasures(report, context);
+  public void processReport(File reportFile, SensorContext context) throws IOException {
+    NormalizedMutationReport report = parser.parse(reportFile);
+    writeMeasures(report, context);
 
-      LOG.info(
-          "Processed mutation report: project={}, tool={}, score={}",
-          report.getProject(),
-          report.getTool(),
-          report.getSummary().getScore());
-
-    } catch (Exception e) {
-      LOG.error("Failed to process mutation report: " + reportFile.getAbsolutePath(), e);
-    }
+    LOG.info(
+        "Processed mutation report: project={}, tool={}, score={}",
+        report.getProject(),
+        report.getTool(),
+        report.getSummary().getScore());
   }
 
   private void writeMeasures(NormalizedMutationReport report, SensorContext context) {
     NormalizedMutationReport.MutationSummary summary = report.getSummary();
 
     // Core metrics
-    saveMeasure(context, MutationMetrics.MUTATION_SCORE, summary.getScore());
-    saveMeasure(context, MutationMetrics.MUTATION_TOTAL, summary.getTotal());
-    saveMeasure(context, MutationMetrics.MUTATION_KILLED, summary.getKilled());
-    saveMeasure(context, MutationMetrics.MUTATION_SURVIVED, summary.getSurvived());
-    saveMeasure(context, MutationMetrics.MUTATION_NO_COVERAGE, summary.getNoCoverage());
-    saveMeasure(context, MutationMetrics.MUTATION_TIMEOUT, summary.getTimeout());
-    saveMeasure(context, MutationMetrics.MUTATION_IGNORED, summary.getIgnored());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_SCORE, summary.getScore());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_TOTAL, summary.getTotal());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_KILLED, summary.getKilled());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_SURVIVED, summary.getSurvived());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_NO_COVERAGE, summary.getNoCoverage());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_TIMEOUT, summary.getTimeout());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_IGNORED, summary.getIgnored());
 
     // Tool and language
-    saveMeasure(context, MutationMetrics.MUTATION_TOOL, report.getTool());
-    saveMeasure(context, MutationMetrics.MUTATION_LANGUAGE, report.getLanguage());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_TOOL, report.getTool());
+    saveProjectMeasure(context, MutationMetrics.MUTATION_LANGUAGE, report.getLanguage());
   }
 
-  private void saveMeasure(SensorContext context, Metric metric, double value) {
-    context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
-  }
-
-  private void saveMeasure(SensorContext context, Metric metric, int value) {
-    context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
-  }
-
-  private void saveMeasure(SensorContext context, Metric metric, String value) {
+  /**
+   * The one way this plugin saves a scanner-side measure. It goes on the project: the scanner has
+   * no default component, and a measure without one fails the whole analysis.
+   */
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public static void saveProjectMeasure(SensorContext context, Metric metric, Serializable value) {
     context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
   }
 }
