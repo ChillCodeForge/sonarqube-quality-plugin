@@ -53,14 +53,14 @@ public class MutationService {
   }
 
   private void saveMeasure(SensorContext context, Metric metric, double value) {
-    context.newMeasure().forMetric(metric).withValue(value).save();
+    context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
   }
 
   private void saveMeasure(SensorContext context, Metric metric, int value) {
-    context.newMeasure().forMetric(metric).withValue(value).save();
+    context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
   }
 
   private void saveMeasure(SensorContext context, Metric metric, String value) {
-    context.newMeasure().forMetric(metric).withValue(value).save();
+    context.newMeasure().on(context.project()).forMetric(metric).withValue(value).save();
   }
 }
