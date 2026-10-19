@@ -12,7 +12,7 @@ import org.sonar.api.server.ws.LocalConnector;
  * server's own answer to whether that user may browse the project: 200 when they may, 403 or 404
  * when they may not or the project does not exist.
  */
-final class ComponentShowRequest implements LocalConnector.LocalRequest {
+final class ComponentShowRequest extends BaseLocalGetRequest {
 
   private static final String COMPONENT = "component";
 
@@ -28,16 +28,6 @@ final class ComponentShowRequest implements LocalConnector.LocalRequest {
   }
 
   @Override
-  public String getMediaType() {
-    return "application/json";
-  }
-
-  @Override
-  public String getMethod() {
-    return "GET";
-  }
-
-  @Override
   public boolean hasParam(String key) {
     return COMPONENT.equals(key);
   }
@@ -50,11 +40,6 @@ final class ComponentShowRequest implements LocalConnector.LocalRequest {
   @Override
   public List<String> getMultiParam(String key) {
     return COMPONENT.equals(key) ? List.of(projectKey) : List.of();
-  }
-
-  @Override
-  public Optional<String> getHeader(String name) {
-    return Optional.empty();
   }
 
   @Override

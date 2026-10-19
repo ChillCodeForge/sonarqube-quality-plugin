@@ -25,7 +25,15 @@ interface QualityDashboardProps {
   componentKey: string;
 }
 
-const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => {
+const SEVERITIES: readonly { readonly severity: string; readonly key: string }[] = [
+  { severity: 'Blocker', key: 'blocker_violations' },
+  { severity: 'Critical', key: 'critical_violations' },
+  { severity: 'Major', key: 'major_violations' },
+  { severity: 'Minor', key: 'minor_violations' },
+  { severity: 'Info', key: 'info_violations' },
+];
+
+export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => {
   const [metrics, setMetrics] = useState<QualityMetric[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,28 +181,10 @@ const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => 
           <h2>Issues by Severity</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart
-              data={[
-                {
-                  severity: 'Blocker',
-                  count: metrics.find((m) => m.key === 'blocker_violations')?.value || 0,
-                },
-                {
-                  severity: 'Critical',
-                  count: metrics.find((m) => m.key === 'critical_violations')?.value || 0,
-                },
-                {
-                  severity: 'Major',
-                  count: metrics.find((m) => m.key === 'major_violations')?.value || 0,
-                },
-                {
-                  severity: 'Minor',
-                  count: metrics.find((m) => m.key === 'minor_violations')?.value || 0,
-                },
-                {
-                  severity: 'Info',
-                  count: metrics.find((m) => m.key === 'info_violations')?.value || 0,
-                },
-              ]}
+              data={SEVERITIES.map(({ severity, key }) => ({
+                severity,
+                count: metrics.find((m) => m.key === key)?.value || 0,
+              }))}
             >
               <XAxis
                 dataKey="severity"
