@@ -97,7 +97,7 @@ describe('QualityDashboard', () => {
 
     expect(await screen.findByText('Quality Overview')).toBeDefined();
     expect(screen.getAllByText('A').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('0%').length).toBe(3);
+    expect(screen.getAllByText('0%')).toHaveLength(3);
   });
 
   it('logs failed loading requests and still leaves the loading state', async () => {
