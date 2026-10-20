@@ -5,9 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.sonar.api.server.ws.LocalConnector;
 
-/**
- * Common base for local GET requests dispatched via {@link LocalConnector}.
- */
+/** Common base for local GET requests dispatched via {@link LocalConnector}. */
 abstract class BaseLocalGetRequest implements LocalConnector.LocalRequest {
 
   @Override

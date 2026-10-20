@@ -1,9 +1,6 @@
 package ch.chillcode.sonar.quality.mutation.api;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import org.sonar.api.server.ws.LocalConnector;
 
 /**
  * A local call to SonarQube's own {@code api/users/current}, which answers {@code
