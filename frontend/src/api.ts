@@ -2,6 +2,17 @@ import axios from 'axios';
 
 const API_BASE = '/api';
 
+type QualityHistoryPoint = {
+  date: string;
+  coverage?: number;
+  mutation_score?: number;
+};
+
+type SonarHistoryMeasure = {
+  metric: string;
+  history?: Array<{ date: string; value?: string | number | null }>;
+};
+
 export async function fetchQualityMetrics(componentKey: string): Promise<any[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/component`, {
@@ -29,7 +40,7 @@ export async function fetchQualityMetrics(componentKey: string): Promise<any[]> 
   }
 }
 
-export async function fetchQualityHistory(componentKey: string): Promise<any[]> {
+export async function fetchQualityHistory(componentKey: string): Promise<QualityHistoryPoint[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/search_history`, {
       params: {
@@ -38,7 +49,26 @@ export async function fetchQualityHistory(componentKey: string): Promise<any[]> 
         from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       },
     });
-    return response.data.measures || [];
+    const byDate = new Map<string, QualityHistoryPoint>();
+    const measures: SonarHistoryMeasure[] = response.data.measures || [];
+
+    for (const measure of measures) {
+      if (measure.metric !== 'coverage' && measure.metric !== 'mutation_score') {
+        continue;
+      }
+      for (const point of measure.history || []) {
+        const row: QualityHistoryPoint = byDate.get(point.date) || { date: point.date };
+        if (point.value != null) {
+          const value = Number(point.value);
+          if (Number.isFinite(value)) {
+            row[measure.metric] = value;
+          }
+        }
+        byDate.set(point.date, row);
+      }
+    }
+
+    return [...byDate.values()];
   } catch (error) {
     console.error('Failed to fetch quality history:', error);
     return [];

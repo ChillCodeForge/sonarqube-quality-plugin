@@ -220,6 +220,7 @@ steps:
         set -eu
         cd /shared/src/frontend
         npm run build
+        npm run test:coverage
   - name: test-backend-verify
     image: registry.chillcode.de/dockerhub-cache/library/maven:3.9.16-eclipse-temurin-21
     volumes: [{name: shared, path: /shared}]
@@ -231,6 +232,8 @@ steps:
     depends_on: [test-frontend-build]
   - name: test-converter-regression
     image: registry.chillcode.de/dockerhub-cache/library/python:3.14-slim
+    environment:
+      PIP_INDEX_URL: https://artifacts.chillcode.de/pypi/pypi-virtual/simple/
     volumes: [{name: shared, path: /shared}]
     commands:
       - |
@@ -240,6 +243,10 @@ steps:
         python3 -m py_compile scripts/mutmut_to_stryker.py
         bash -n scripts/normalize-mutation-report.sh scripts/upload-mutation-report.sh
         sh -n .ci/deploy.sh .ci/deploy-remote.sh
+        python3 -m pip install --no-cache-dir --quiet 'coverage==7.16.2'
+        python3 -m coverage run --branch --source=mutmut_to_stryker -m unittest scripts/tests/test_mutmut_to_stryker.py
+        python3 -m coverage report --fail-under=90
+        python3 -m coverage xml -o python-coverage.xml
     depends_on: [test-backend-verify]
 trigger:
   branch: [main]
@@ -267,6 +274,8 @@ steps:
         test -n "$${SONAR_TOKEN:-}" || { echo 'sonar_token is not set.' >&2; exit 1; }
         cd /shared/src
         test -s backend/target/site/jacoco/jacoco.xml
+        test -s frontend/coverage/lcov.info
+        test -s python-coverage.xml
         # Pull requests are analysed as pull requests (Haembina Branch Analysis
         # plugin on sonar.chillcode.de); without these keys a PR scan overwrites
         # main's analysis. The plugin has no Drone auto-configuration.
@@ -280,12 +289,14 @@ steps:
           -Dsonar.projectKey=sonarqube-quality-plugin \
           -Dsonar.projectName='SonarQube Quality Plugin' \
           -Dsonar.sources=backend/src/main/java,frontend/src,scripts \
-          -Dsonar.tests=backend/src/test,scripts/tests \
-          -Dsonar.test.inclusions=**/*Test.java,**/test_*.py \
+          -Dsonar.tests=backend/src/test,scripts/tests,frontend/src \
+          -Dsonar.test.inclusions='**/*Test.java,**/test_*.py,frontend/src/**/*.test.ts,frontend/src/**/*.test.tsx,frontend/src/**/*.spec.ts,frontend/src/**/*.spec.tsx' \
           -Dsonar.java.binaries=backend/target/classes \
           -Dsonar.java.test.binaries=backend/target/test-classes \
           -Dsonar.coverage.jacoco.xmlReportPaths=backend/target/site/jacoco/jacoco.xml \
-          -Dsonar.exclusions=frontend/node_modules/**,backend/target/**,frontend/dist/**,.cache/**,.chillcode-standards/**,.chillcode-quality-reports/** \
+          -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info \
+          -Dsonar.python.coverage.reportPaths=python-coverage.xml \
+          -Dsonar.exclusions='frontend/node_modules/**,backend/target/**,frontend/dist/**,scripts/tests/**,frontend/src/**/*.test.ts,frontend/src/**/*.test.tsx,frontend/src/**/*.spec.ts,frontend/src/**/*.spec.tsx,.cache/**,.chillcode-standards/**,.chillcode-quality-reports/**' \
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
           -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"

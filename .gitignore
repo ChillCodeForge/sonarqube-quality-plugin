@@ -13,5 +13,14 @@ backend/target/
 *.iml
 .vscode/
 
+# Coverage reports
+.coverage
+python-coverage.xml
+frontend/coverage/
+
+# Python bytecode
+scripts/__pycache__/
+scripts/tests/__pycache__/
+
 # OS
 .DS_Store
