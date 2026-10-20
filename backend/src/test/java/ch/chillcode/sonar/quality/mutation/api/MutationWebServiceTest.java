@@ -316,6 +316,67 @@ class MutationWebServiceTest {
     org.mockito.Mockito.verify(storage).storeReport(org.mockito.ArgumentMatchers.any());
   }
 
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({
+    "95.0, #4c1",
+    "80.0, #97CA00",
+    "65.0, #dfb317",
+    "45.0, #fe7d37",
+    "20.0, #e05d44"
+  })
+  void rendersBadgeWithTheScoreBandColor(double score, String color) throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    NormalizedMutationReport report = new NormalizedMutationReport();
+    NormalizedMutationReport.MutationSummary summary =
+        new NormalizedMutationReport.MutationSummary();
+    summary.setScore(score);
+    report.setSummary(summary);
+    org.mockito.Mockito.when(storage.loadReport("proj1", "main")).thenReturn(report);
+
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    RecordingResponse response = new RecordingResponse();
+
+    context
+        .controller("api/chillcode_mutation")
+        .action("badge")
+        .handler()
+        .handle(request, response);
+
+    assertEquals(200, response.status());
+    assertEquals("image/svg+xml", response.mediaType());
+    assertTrue(response.body().contains("mutation score: " + String.format("%.1f%%", score)));
+    assertTrue(response.body().contains("fill=\"" + color + "\""));
+  }
+
+  @Test
+  void rendersInactiveBadgeWhenReportDoesNotExist() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    RecordingResponse response = new RecordingResponse();
+
+    context
+        .controller("api/chillcode_mutation")
+        .action("badge")
+        .handler()
+        .handle(request, response);
+
+    assertTrue(response.body().contains("no report"));
+    assertTrue(response.body().contains("fill=\"#9f9f9f\""));
+    org.mockito.Mockito.verify(storage).loadReport("proj1", "main");
+  }
+
   @Test
   void rejectsAReportAboveTheConfiguredLimit() {
     byte[] report = "123456".getBytes();
