@@ -200,6 +200,11 @@ class MutationWebServiceTest {
     assertTrue(res2.body().contains("\"hasReport\":true"));
     assertTrue(res2.body().contains("\"mutationScore\":75.5"));
     assertTrue(res2.body().contains("\"totalMutants\":40"));
+
+    org.mockito.Mockito.when(req1.param("branch")).thenReturn("");
+    RecordingResponse emptyBranchResponse = new RecordingResponse();
+    statusAction.handler().handle(req1, emptyBranchResponse);
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.times(3)).loadReport("proj1", "main");
   }
 
   @Test
@@ -375,6 +380,45 @@ class MutationWebServiceTest {
     assertTrue(response.body().contains("no report"));
     assertTrue(response.body().contains("fill=\"#9f9f9f\""));
     org.mockito.Mockito.verify(storage).loadReport("proj1", "main");
+  }
+
+  @Test
+  void handlesDownloadAuthorizationMissingReportAndBranchDefaults() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    WebService.Action download = context.controller("api/chillcode_mutation").action("download");
+
+    Request denied = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(denied.mandatoryParam("projectKey")).thenReturn("private");
+    org.mockito.Mockito.when(denied.localConnector()).thenReturn(connectorAnswering(403));
+    RecordingResponse deniedResponse = new RecordingResponse();
+    download.handler().handle(denied, deniedResponse);
+    assertEquals(404, deniedResponse.status());
+
+    Request missing = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(missing.mandatoryParam("projectKey")).thenReturn("proj1");
+    org.mockito.Mockito.when(missing.param("branch")).thenReturn("");
+    org.mockito.Mockito.when(missing.localConnector()).thenReturn(connectorAnswering(200));
+    RecordingResponse missingResponse = new RecordingResponse();
+    download.handler().handle(missing, missingResponse);
+    assertEquals(404, missingResponse.status());
+    org.mockito.Mockito.verify(storage).loadReport("proj1", "main");
+
+    NormalizedMutationReport report = new NormalizedMutationReport();
+    org.mockito.Mockito.when(storage.loadReport("proj1", "feature")).thenReturn(report);
+    Request found = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(found.mandatoryParam("projectKey")).thenReturn("proj1");
+    org.mockito.Mockito.when(found.param("branch")).thenReturn("feature");
+    org.mockito.Mockito.when(found.localConnector()).thenReturn(connectorAnswering(200));
+    RecordingResponse foundResponse = new RecordingResponse();
+    download.handler().handle(found, foundResponse);
+    assertEquals(200, foundResponse.status());
+    assertEquals("application/json", foundResponse.mediaType());
+    assertTrue(foundResponse.body().contains("\"project\""));
   }
 
   @Test
