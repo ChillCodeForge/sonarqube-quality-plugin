@@ -7,11 +7,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import java.io.IOException;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MutationReportParserTest {
 
   private final MutationReportParser parser = new MutationReportParser();
+
+  @Test
+  void parsesCompressedAndUncompressedReportFiles(@TempDir Path directory) throws IOException {
+    String json = "{\"schemaVersion\":1,\"files\":{}}";
+    Path plain = directory.resolve("report.json");
+    java.nio.file.Files.writeString(plain, json);
+    assertEquals("stryker", parser.parse(plain.toFile()).getTool());
+
+    Path compressed = directory.resolve("report.json.gz");
+    try (java.util.zip.GZIPOutputStream output =
+        new java.util.zip.GZIPOutputStream(java.nio.file.Files.newOutputStream(compressed))) {
+      output.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    assertEquals("stryker", parser.parse(compressed.toFile()).getTool());
+  }
+
+  @Test
+  void rejectsAReportFileThatDoesNotExist() {
+    java.io.File missing = new java.io.File("target/no-such-mutation-report.json");
+
+    assertThrows(IllegalArgumentException.class, () -> parser.parse(missing));
+  }
 
   // --- Pitest XML ---
 

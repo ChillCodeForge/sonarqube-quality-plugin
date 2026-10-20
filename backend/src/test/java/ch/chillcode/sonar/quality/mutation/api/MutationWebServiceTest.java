@@ -200,6 +200,11 @@ class MutationWebServiceTest {
     assertTrue(res2.body().contains("\"hasReport\":true"));
     assertTrue(res2.body().contains("\"mutationScore\":75.5"));
     assertTrue(res2.body().contains("\"totalMutants\":40"));
+
+    org.mockito.Mockito.when(req1.param("branch")).thenReturn("");
+    RecordingResponse emptyBranchResponse = new RecordingResponse();
+    statusAction.handler().handle(req1, emptyBranchResponse);
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.times(3)).loadReport("proj1", "main");
   }
 
   @Test
@@ -314,6 +319,114 @@ class MutationWebServiceTest {
     assertTrue(res.body().contains("\"projectKey\":\"proj1\""));
     assertTrue(res.body().contains("\"branch\":\"main\""));
     org.mockito.Mockito.verify(storage).storeReport(org.mockito.ArgumentMatchers.any());
+  }
+
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({
+    "95.0, #4c1",
+    "90.0, #4c1",
+    "89.9, #97CA00",
+    "80.0, #97CA00",
+    "75.0, #97CA00",
+    "74.9, #dfb317",
+    "65.0, #dfb317",
+    "60.0, #dfb317",
+    "59.9, #fe7d37",
+    "45.0, #fe7d37",
+    "40.0, #fe7d37",
+    "39.9, #e05d44",
+    "20.0, #e05d44"
+  })
+  void rendersBadgeWithTheScoreBandColor(double score, String color) throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    NormalizedMutationReport report = new NormalizedMutationReport();
+    NormalizedMutationReport.MutationSummary summary =
+        new NormalizedMutationReport.MutationSummary();
+    summary.setScore(score);
+    report.setSummary(summary);
+    org.mockito.Mockito.when(storage.loadReport("proj1", "main")).thenReturn(report);
+
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    RecordingResponse response = new RecordingResponse();
+
+    context
+        .controller("api/chillcode_mutation")
+        .action("badge")
+        .handler()
+        .handle(request, response);
+
+    assertEquals(200, response.status());
+    assertEquals("image/svg+xml", response.mediaType());
+    assertTrue(response.body().contains("mutation score: " + String.format("%.1f%%", score)));
+    assertTrue(response.body().contains("fill=\"" + color + "\""));
+  }
+
+  @Test
+  void rendersInactiveBadgeWhenReportDoesNotExist() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    RecordingResponse response = new RecordingResponse();
+
+    context
+        .controller("api/chillcode_mutation")
+        .action("badge")
+        .handler()
+        .handle(request, response);
+
+    assertTrue(response.body().contains("no report"));
+    assertTrue(response.body().contains("fill=\"#9f9f9f\""));
+    org.mockito.Mockito.verify(storage).loadReport("proj1", "main");
+  }
+
+  @Test
+  void handlesDownloadAuthorizationMissingReportAndBranchDefaults() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    WebService.Action download = context.controller("api/chillcode_mutation").action("download");
+
+    Request denied = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(denied.mandatoryParam("projectKey")).thenReturn("private");
+    org.mockito.Mockito.when(denied.localConnector()).thenReturn(connectorAnswering(403));
+    RecordingResponse deniedResponse = new RecordingResponse();
+    download.handler().handle(denied, deniedResponse);
+    assertEquals(404, deniedResponse.status());
+
+    Request missing = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(missing.mandatoryParam("projectKey")).thenReturn("proj1");
+    org.mockito.Mockito.when(missing.param("branch")).thenReturn("");
+    org.mockito.Mockito.when(missing.localConnector()).thenReturn(connectorAnswering(200));
+    RecordingResponse missingResponse = new RecordingResponse();
+    download.handler().handle(missing, missingResponse);
+    assertEquals(404, missingResponse.status());
+    org.mockito.Mockito.verify(storage).loadReport("proj1", "main");
+
+    NormalizedMutationReport report = new NormalizedMutationReport();
+    org.mockito.Mockito.when(storage.loadReport("proj1", "feature")).thenReturn(report);
+    Request found = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(found.mandatoryParam("projectKey")).thenReturn("proj1");
+    org.mockito.Mockito.when(found.param("branch")).thenReturn("feature");
+    org.mockito.Mockito.when(found.localConnector()).thenReturn(connectorAnswering(200));
+    RecordingResponse foundResponse = new RecordingResponse();
+    download.handler().handle(found, foundResponse);
+    assertEquals(200, foundResponse.status());
+    assertEquals("application/json", foundResponse.mediaType());
+    assertTrue(foundResponse.body().contains("\"project\""));
   }
 
   @Test
