@@ -324,9 +324,17 @@ class MutationWebServiceTest {
   @ParameterizedTest
   @org.junit.jupiter.params.provider.CsvSource({
     "95.0, #4c1",
+    "90.0, #4c1",
+    "89.9, #97CA00",
     "80.0, #97CA00",
+    "75.0, #97CA00",
+    "74.9, #dfb317",
     "65.0, #dfb317",
+    "60.0, #dfb317",
+    "59.9, #fe7d37",
     "45.0, #fe7d37",
+    "40.0, #fe7d37",
+    "39.9, #e05d44",
     "20.0, #e05d44"
   })
   void rendersBadgeWithTheScoreBandColor(double score, String color) throws Exception {
