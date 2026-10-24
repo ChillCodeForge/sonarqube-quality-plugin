@@ -109,7 +109,7 @@ public class MutationWebService implements WebService {
     // Status check
     NewAction statusAction =
         controller
-            .createAction("status")
+            .createAction(PROP_STATUS)
             .setDescription("Quick status check - has report? score?")
             .setSince("1.0")
             .setResponseExample(example("status.json"))
@@ -253,17 +253,17 @@ public class MutationWebService implements WebService {
     if (!authorizeMutationWrite(request, response)) {
       return;
     }
-    String projectKey = request.mandatoryParam("projectKey");
-    String branch = request.param("branch");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
 
-    try (InputStream is = request.paramAsInputStream("report");
+    try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
         GZIPInputStream gis = new GZIPInputStream(is)) {
 
       byte[] content = readLimited(gis, storage.getMaxReportSize());
-      NormalizedMutationReport report = parser.parse(content, "report");
+      NormalizedMutationReport report = parser.parse(content, PARAM_REPORT);
       // The report body (raw Stryker JSON / PITest XML) has no
       // reliable project identifier of its own - the projectKey/
       // branch the caller passed as query params are the source of
@@ -289,11 +289,11 @@ public class MutationWebService implements WebService {
   }
 
   private void handleDownload(Request request, Response response) throws Exception {
-    String projectKey = request.mandatoryParam("projectKey");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param("branch");
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
@@ -312,11 +312,11 @@ public class MutationWebService implements WebService {
   }
 
   private void handleSummary(Request request, Response response) throws Exception {
-    String projectKey = request.mandatoryParam("projectKey");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param("branch");
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
@@ -348,11 +348,11 @@ public class MutationWebService implements WebService {
   }
 
   private void handleStatus(Request request, Response response) throws Exception {
-    String projectKey = request.mandatoryParam("projectKey");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param("branch");
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
@@ -376,8 +376,8 @@ public class MutationWebService implements WebService {
     if (!authorizeMutationWrite(request, response)) {
       return;
     }
-    String projectKey = request.mandatoryParam("projectKey");
-    String branch = request.param("branch");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
@@ -394,8 +394,8 @@ public class MutationWebService implements WebService {
   }
 
   private void handleBadge(Request request, Response response) throws Exception {
-    String projectKey = request.mandatoryParam("projectKey");
-    String branch = request.param("branch");
+    String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
+    String branch = request.param(PARAM_BRANCH);
     if (branch == null || branch.isEmpty()) {
       branch = "main";
     }
