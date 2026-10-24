@@ -48,6 +48,12 @@ public class MutationReportParser {
   private static final String METRIC_TIMEOUT = "timeout";
   private static final String METRIC_IGNORED = "ignored";
 
+  private static final String UNKNOWN = "unknown";
+  private static final String LANGUAGE_PYTHON = "python";
+  private static final String LANGUAGE_TYPESCRIPT = "typescript";
+  private static final String LANGUAGE_JAVASCRIPT = "javascript";
+  private static final String LANGUAGE_JAVA = "java";
+
   private static final Logger LOG = Loggers.get(MutationReportParser.class);
   private final ObjectMapper mapper;
 
@@ -153,7 +159,7 @@ public class MutationReportParser {
     report.setSchemaVersion(root.path("schemaVersion").asInt(1));
     report.setTool("stryker");
     report.setLanguage(detectLanguage(root));
-    report.setProject(root.path("projectName").asText("unknown"));
+    report.setProject(root.path("projectName").asText(UNKNOWN));
     report.setBranch(root.path("branch").asText("main"));
     report.setCommit(root.path("commit").asText(""));
     report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
@@ -324,18 +330,19 @@ public class MutationReportParser {
 
   private String detectLanguage(JsonNode root) {
     String projectName = root.path("projectName").asText("");
-    if (projectName.toLowerCase().contains("python") || projectName.toLowerCase().contains("py")) {
-      return "python";
+    if (projectName.toLowerCase().contains(LANGUAGE_PYTHON)
+        || projectName.toLowerCase().contains("py")) {
+      return LANGUAGE_PYTHON;
     }
-    return "typescript"; // Default for Stryker
+    return LANGUAGE_TYPESCRIPT; // Default for Stryker
   }
 
   private String detectLanguageFromPath(String path) {
-    if (path.endsWith(".py")) return "python";
-    if (path.endsWith(".ts") || path.endsWith(".tsx")) return "typescript";
-    if (path.endsWith(".js") || path.endsWith(".jsx")) return "javascript";
-    if (path.endsWith(".java")) return "java";
-    return "unknown";
+    if (path.endsWith(".py")) return LANGUAGE_PYTHON;
+    if (path.endsWith(".ts") || path.endsWith(".tsx")) return LANGUAGE_TYPESCRIPT;
+    if (path.endsWith(".js") || path.endsWith(".jsx")) return LANGUAGE_JAVASCRIPT;
+    if (path.endsWith(".java")) return LANGUAGE_JAVA;
+    return UNKNOWN;
   }
 
   private NormalizedMutationReport parsePitestXml(String xml) throws IOException {
@@ -351,8 +358,8 @@ public class MutationReportParser {
     NormalizedMutationReport report = new NormalizedMutationReport();
     report.setSchemaVersion(1);
     report.setTool("pitest");
-    report.setLanguage("java");
-    report.setProject("unknown");
+    report.setLanguage(LANGUAGE_JAVA);
+    report.setProject(UNKNOWN);
     report.setBranch("main");
     report.setCommit("");
     report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
@@ -492,7 +499,7 @@ public class MutationReportParser {
   // Stryker's path-keyed files map.
   private String classAndSourceFileToPath(String mutatedClass, String sourceFile) {
     if (mutatedClass == null || mutatedClass.isEmpty()) {
-      return sourceFile == null ? "unknown" : sourceFile;
+      return sourceFile == null ? UNKNOWN : sourceFile;
     }
     int lastDot = mutatedClass.lastIndexOf('.');
     if (lastDot < 0) {
