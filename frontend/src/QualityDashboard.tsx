@@ -10,14 +10,14 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import MetricCard from './components/MetricCard';
+import MetricCard, { type Rating } from './components/MetricCard';
 import { fetchQualityMetrics, fetchQualityHistory } from './api';
 
 interface QualityMetric {
   key: string;
   name: string;
   value: number | string;
-  rating?: 'A' | 'B' | 'C' | 'D' | 'E';
+  rating?: Rating;
   trend?: 'up' | 'down' | 'stable';
 }
 

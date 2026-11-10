@@ -13,7 +13,7 @@ import {
   Legend,
 } from 'recharts';
 import Gauge from './components/Gauge';
-import MetricCard from './components/MetricCard';
+import MetricCard, { type Rating } from './components/MetricCard';
 import MutantTable from './components/MutantTable';
 import { fetchMutationReport, fetchMutationSummary } from './api';
 
@@ -312,7 +312,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
   );
 };
 
-function getRating(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
+function getRating(score: number): Rating {
   if (score >= 90) return 'A';
 
   if (score >= 75) return 'B';
@@ -324,8 +324,8 @@ function getRating(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
   return 'E';
 }
 
-function ratingColor(rating: 'A' | 'B' | 'C' | 'D' | 'E'): string {
-  const colors: Record<'A' | 'B' | 'C' | 'D' | 'E', string> = {
+function ratingColor(rating: Rating): string {
+  const colors: Record<Rating, string> = {
     A: 'var(--cq-green)',
     B: 'var(--cq-blue)',
     C: 'var(--cq-amber)',

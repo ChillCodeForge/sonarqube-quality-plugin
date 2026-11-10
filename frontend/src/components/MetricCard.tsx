@@ -1,6 +1,6 @@
 import React from 'react';
 
-type Rating = 'A' | 'B' | 'C' | 'D' | 'E';
+export type Rating = 'A' | 'B' | 'C' | 'D' | 'E';
 
 interface MetricCardProps {
   title: string;
