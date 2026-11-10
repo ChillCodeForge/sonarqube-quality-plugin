@@ -263,6 +263,7 @@ depends_on: [lint, test]
 steps:
   - name: analysis-sonarqube
     image: registry.chillcode.de/dockerhub-cache/sonarsource/sonar-scanner-cli:12
+    user: root
     environment:
       SONAR_HOST_URL: https://sonar.chillcode.de
       SONAR_TOKEN:
@@ -281,6 +282,19 @@ steps:
         # main's analysis. The plugin has no Drone auto-configuration.
         PR_ARGS=""
         if [ -n "$${DRONE_PULL_REQUEST:-}" ]; then
+          # Drone's PR clone checks out the target branch and fast-forwards it
+          # onto the PR head, so the local target branch equals HEAD. The
+          # scanner resolves sonar.pullrequest.base to that local branch first,
+          # finds 0 changed lines and drops every PR issue (gate always green,
+          # findings first show up on main). Detach HEAD (worktree unchanged)
+          # and point the local target branch back at the fetched remote one;
+          # a missing remote ref fails the step instead of scanning blind.
+          git -c safe.directory="$$PWD" checkout -q --detach
+          git -c safe.directory="$$PWD" update-ref "refs/heads/$${DRONE_TARGET_BRANCH}" "refs/remotes/origin/$${DRONE_TARGET_BRANCH}" || {
+            echo "Error: refs/remotes/origin/$${DRONE_TARGET_BRANCH} is missing; cannot compute the PR's changed lines." >&2
+            exit 1
+          }
+          echo "Sonar PR base: refs/heads/$${DRONE_TARGET_BRANCH} reset to refs/remotes/origin/$${DRONE_TARGET_BRANCH}"
           PR_ARGS="-Dsonar.pullrequest.key=$${DRONE_PULL_REQUEST} -Dsonar.pullrequest.branch=$${DRONE_SOURCE_BRANCH} -Dsonar.pullrequest.base=$${DRONE_TARGET_BRANCH}"
         fi
         sonar-scanner \
