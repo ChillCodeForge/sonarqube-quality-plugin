@@ -19,5 +19,6 @@ declare global {
 window.registerExtension('chillcodequality/quality_dashboard', (options: any) => {
   injectTheme();
   const componentKey = options?.component?.key ?? '';
+
   return <QualityDashboard componentKey={componentKey} />;
 });

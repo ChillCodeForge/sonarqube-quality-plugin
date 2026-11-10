@@ -18,6 +18,7 @@ vi.mock('./api', () => ({
 vi.mock('recharts', () => {
   const withChildren = ({ children }: { children?: React.ReactNode }) => children;
   const empty = () => null;
+
   return {
     Bar: empty,
     BarChart: empty,
@@ -38,6 +39,7 @@ vi.mock('recharts', () => {
         label({ name: entry.name, percent: entry.value / total }),
       );
       chartCallbacks.paddingAngle = paddingAngle;
+
       return null;
     },
     PieChart: withChildren,
@@ -48,6 +50,7 @@ vi.mock('recharts', () => {
       formatter: (value: number | string, name: string) => [string, string];
     }) => {
       chartCallbacks.tooltipResult = formatter(2, 'Killed');
+
       return null;
     },
     XAxis: empty,

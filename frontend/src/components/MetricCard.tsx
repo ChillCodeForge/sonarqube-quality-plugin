@@ -1,15 +1,17 @@
 import React from 'react';
 
+type Rating = 'A' | 'B' | 'C' | 'D' | 'E';
+
 interface MetricCardProps {
   title: string;
   value: string | number;
-  rating?: 'A' | 'B' | 'C' | 'D' | 'E';
+  rating?: Rating;
   trend?: 'up' | 'down' | 'stable';
   color?: string;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({ title, value, rating, trend, color }) => {
-  const ratingColors: Record<string, string> = {
+  const ratingColors: Record<Rating, string> = {
     A: 'var(--cq-green)',
     B: 'var(--cq-blue)',
     C: 'var(--cq-amber)',
@@ -31,11 +33,11 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, rating, trend, co
 
   const accent = color || (rating ? ratingColors[rating] : undefined);
 
+  // SAFETY: React.CSSProperties has no index signature for custom properties; '--cq-accent' is a valid CSS variable.
+  const style = accent ? ({ '--cq-accent': accent } as React.CSSProperties) : undefined;
+
   return (
-    <div
-      className="cq-metric-card"
-      style={accent ? ({ '--cq-accent': accent } as React.CSSProperties) : undefined}
-    >
+    <div className="cq-metric-card" style={style}>
       <div className="cq-metric-title">{title}</div>
       <div className="cq-metric-value" style={{ color: color || 'inherit' }}>
         {value}

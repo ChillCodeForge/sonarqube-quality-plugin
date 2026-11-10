@@ -13,5 +13,6 @@ window.registerExtension('chillcodequality/mutation_testing', (options: any) => 
   injectTheme();
   const projectKey = options?.component?.key ?? '';
   const branch = options?.branchLike?.name ?? 'main';
+
   return <MutationTesting projectKey={projectKey} branch={branch} />;
 });

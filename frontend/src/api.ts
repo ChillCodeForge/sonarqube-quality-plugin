@@ -33,9 +33,11 @@ export async function fetchQualityMetrics(componentKey: string): Promise<any[]> 
         ].join(','),
       },
     });
+
     return response.data.component?.measures || [];
   } catch (error) {
     console.error('Failed to fetch quality metrics:', error);
+
     return [];
   }
 }
@@ -49,6 +51,7 @@ export async function fetchQualityHistory(componentKey: string): Promise<Quality
         from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       },
     });
+
     const byDate = new Map<string, QualityHistoryPoint>();
     const measures: SonarHistoryMeasure[] = response.data.measures || [];
 
@@ -56,14 +59,18 @@ export async function fetchQualityHistory(componentKey: string): Promise<Quality
       if (measure.metric !== 'coverage' && measure.metric !== 'mutation_score') {
         continue;
       }
+
       for (const point of measure.history || []) {
         const row: QualityHistoryPoint = byDate.get(point.date) || { date: point.date };
+
         if (point.value != null) {
           const value = Number(point.value);
+
           if (Number.isFinite(value)) {
             row[measure.metric] = value;
           }
         }
+
         byDate.set(point.date, row);
       }
     }
@@ -71,6 +78,7 @@ export async function fetchQualityHistory(componentKey: string): Promise<Quality
     return [...byDate.values()];
   } catch (error) {
     console.error('Failed to fetch quality history:', error);
+
     return [];
   }
 }
@@ -83,10 +91,13 @@ export async function fetchMutationSummary(
     const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
       params: { projectKey, branch },
     });
+
     const data = response.data;
+
     if (!data || data.hasReport === false) {
       return null;
     }
+
     // Backend field names (mutationScore, totalMutants, killedMutants, ...)
     // don't match what MutationTesting.tsx expects (score, total, killed,
     // ...) - map them here so the component's summary.score etc. actually
@@ -104,6 +115,7 @@ export async function fetchMutationSummary(
     };
   } catch (error) {
     console.error('Failed to fetch mutation summary:', error);
+
     return null;
   }
 }
@@ -116,9 +128,11 @@ export async function fetchMutationReport(
     const response = await axios.get(`${API_BASE}/chillcode_mutation/download`, {
       params: { projectKey, branch },
     });
+
     return response.data;
   } catch (error) {
     console.error('Failed to fetch mutation report:', error);
+
     return null;
   }
 }

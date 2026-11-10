@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchQualityHistory, fetchQualityMetrics } from './api';
 import QualityDashboard from './QualityDashboard';
 
-const chartCapture = vi.hoisted(() => ({ areaData: null as unknown }));
+const captureAreaData = vi.hoisted(() => vi.fn());
 
 vi.mock('./api', () => ({
   fetchQualityHistory: vi.fn(),
@@ -14,10 +14,13 @@ vi.mock('./api', () => ({
 vi.mock('recharts', () => {
   const withChildren = ({ children }: { children?: React.ReactNode }) => children;
   const empty = () => null;
+
   const areaChart = ({ data }: { data: unknown }) => {
-    chartCapture.areaData = data;
+    captureAreaData(data);
+
     return null;
   };
+
   return {
     AreaChart: areaChart,
     Bar: empty,
@@ -37,7 +40,7 @@ vi.mock('recharts', () => {
 
 describe('QualityDashboard', () => {
   beforeEach(() => {
-    chartCapture.areaData = null;
+    captureAreaData.mockClear();
     vi.mocked(fetchQualityMetrics).mockReset();
     vi.mocked(fetchQualityHistory).mockReset();
     vi.mocked(fetchQualityMetrics).mockResolvedValue([]);
@@ -48,7 +51,9 @@ describe('QualityDashboard', () => {
 
   it('shows loading while both Sonar requests are pending, then renders metric values', async () => {
     type Metrics = Awaited<ReturnType<typeof fetchQualityMetrics>>;
+
     type History = Awaited<ReturnType<typeof fetchQualityHistory>>;
+
     let finishMetrics!: (metrics: Metrics) => void;
     let finishHistory!: (history: History) => void;
     vi.mocked(fetchQualityMetrics).mockReturnValue(
@@ -81,7 +86,7 @@ describe('QualityDashboard', () => {
     finishHistory([{ date: '2026-10-20', coverage: 91.4, mutation_score: 84 }]);
 
     expect(await screen.findByText('Quality Overview')).toBeDefined();
-    expect(chartCapture.areaData).toEqual([
+    expect(captureAreaData).toHaveBeenLastCalledWith([
       { date: '2026-10-20', coverage: 91.4, mutation_score: 84 },
     ]);
     expect(screen.getByText('91.4%')).toBeDefined();
