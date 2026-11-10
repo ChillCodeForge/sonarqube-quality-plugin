@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./theme', () => ({ injectTheme: mocks.injectTheme }));
+
 vi.mock('./QualityDashboard', () => ({ default: mocks.QualityDashboard }));
+
 vi.mock('./MutationTesting', () => ({ default: mocks.MutationTesting }));
 
 type ExtensionOptions =
@@ -17,13 +19,17 @@ type ExtensionOptions =
       branchLike?: { name?: string } | null;
     }
   | undefined;
+
 type ExtensionCallback = (options: ExtensionOptions) => React.ReactElement;
+
 type RegisterExtension = (key: string, callback: ExtensionCallback) => void;
 
 let registerExtension: ReturnType<typeof vi.fn<RegisterExtension>>;
+
 const windowWithRegistration = window as unknown as {
   registerExtension?: RegisterExtension;
 };
+
 const originalRegisterExtension = windowWithRegistration.registerExtension;
 
 beforeEach(() => {
@@ -65,10 +71,12 @@ describe('SonarQube page extension entrypoints', () => {
     expect(registerExtension).toHaveBeenCalledOnce();
     expect(registerExtension.mock.calls[0][0]).toBe('chillcodequality/mutation_testing');
     const callback = registerExtension.mock.calls[0][1];
+
     const selectedBranch = callback({
       component: { key: 'project:app' },
       branchLike: { name: 'feature/reports' },
     });
+
     expect(selectedBranch.type).toBe(mocks.MutationTesting);
     expect(selectedBranch.props).toEqual({ projectKey: 'project:app', branch: 'feature/reports' });
 

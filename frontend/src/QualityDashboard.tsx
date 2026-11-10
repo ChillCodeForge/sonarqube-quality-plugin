@@ -48,6 +48,7 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
         fetchQualityMetrics(componentKey),
         fetchQualityHistory(componentKey),
       ]);
+
       setMetrics(metricsData);
       setHistory(historyData);
     } catch (error) {

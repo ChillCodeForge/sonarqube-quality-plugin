@@ -12,6 +12,7 @@ import path from 'path';
 // self-contained bundle via separate library-mode invocations, selected by
 // the PAGE env var (see package.json build script).
 const page = process.env.PAGE;
+
 if (!page) {
   throw new Error('Set PAGE=quality_dashboard|mutation_testing before building');
 }

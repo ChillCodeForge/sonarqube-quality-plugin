@@ -19,27 +19,27 @@ interface MutantTableProps {
 }
 
 const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
-  const statusColors: Record<string, string> = {
-    KILLED: 'var(--cq-green)',
-    SURVIVED: 'var(--cq-red)',
-    NO_COVERAGE: 'var(--cq-amber)',
-    TIMEOUT: 'var(--cq-violet)',
-    IGNORED: 'var(--cq-violet)',
-    ERROR: 'var(--cq-red)',
-    COMPILE_ERROR: 'var(--cq-red)',
-    RUNTIME_ERROR: 'var(--cq-red)',
-  };
+  const statusColors = new Map([
+    ['KILLED', 'var(--cq-green)'],
+    ['SURVIVED', 'var(--cq-red)'],
+    ['NO_COVERAGE', 'var(--cq-amber)'],
+    ['TIMEOUT', 'var(--cq-violet)'],
+    ['IGNORED', 'var(--cq-violet)'],
+    ['ERROR', 'var(--cq-red)'],
+    ['COMPILE_ERROR', 'var(--cq-red)'],
+    ['RUNTIME_ERROR', 'var(--cq-red)'],
+  ]);
 
-  const statusLabels: Record<string, string> = {
-    KILLED: 'Killed',
-    SURVIVED: 'Survived',
-    NO_COVERAGE: 'No Coverage',
-    TIMEOUT: 'Timeout',
-    IGNORED: 'Ignored',
-    ERROR: 'Error',
-    COMPILE_ERROR: 'Compile Error',
-    RUNTIME_ERROR: 'Runtime Error',
-  };
+  const statusLabels = new Map([
+    ['KILLED', 'Killed'],
+    ['SURVIVED', 'Survived'],
+    ['NO_COVERAGE', 'No Coverage'],
+    ['TIMEOUT', 'Timeout'],
+    ['IGNORED', 'Ignored'],
+    ['ERROR', 'Error'],
+    ['COMPILE_ERROR', 'Compile Error'],
+    ['RUNTIME_ERROR', 'Runtime Error'],
+  ]);
 
   if (!mutants || mutants.length === 0) {
     return <div className="cq-empty">No mutants to display</div>;
@@ -68,9 +68,9 @@ const MutantTable: React.FC<MutantTableProps> = ({ mutants }) => {
               <td>
                 <span
                   className="cq-status-badge"
-                  style={{ backgroundColor: statusColors[mutant.status] || 'var(--cq-violet)' }}
+                  style={{ backgroundColor: statusColors.get(mutant.status) ?? 'var(--cq-violet)' }}
                 >
-                  {statusLabels[mutant.status] || mutant.status}
+                  {statusLabels.get(mutant.status) ?? mutant.status}
                 </span>
               </td>
               <td>

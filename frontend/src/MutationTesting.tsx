@@ -65,7 +65,9 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
         fetchMutationSummary(projectKey, branch),
         fetchMutationReport(projectKey, branch),
       ]);
+
       setSummary(summaryData);
+
       if (reportData?.files) {
         setFiles(reportData.files);
       }
@@ -112,7 +114,10 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
       <section className="cq-summary-grid">
         <div
           className="cq-metric-card cq-gauge-card"
-          style={{ '--cq-accent': ratingColor(getRating(summary.score)) } as React.CSSProperties}
+          style={
+            // SAFETY: React.CSSProperties has no index signature for custom properties; '--cq-accent' is a valid CSS variable.
+            { '--cq-accent': ratingColor(getRating(summary.score)) } as React.CSSProperties
+          }
         >
           <Gauge
             value={summary.score}
@@ -309,20 +314,25 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
 
 function getRating(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
   if (score >= 90) return 'A';
+
   if (score >= 75) return 'B';
+
   if (score >= 60) return 'C';
+
   if (score >= 40) return 'D';
+
   return 'E';
 }
 
 function ratingColor(rating: 'A' | 'B' | 'C' | 'D' | 'E'): string {
-  const colors: Record<string, string> = {
+  const colors: Record<'A' | 'B' | 'C' | 'D' | 'E', string> = {
     A: 'var(--cq-green)',
     B: 'var(--cq-blue)',
     C: 'var(--cq-amber)',
     D: 'var(--cq-red)',
     E: 'var(--cq-red-deep)',
   };
+
   return colors[rating];
 }
 

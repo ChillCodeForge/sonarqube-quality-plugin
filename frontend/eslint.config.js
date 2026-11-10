@@ -1,6 +1,7 @@
 import { base } from '@chillcode/eslint-config';
 import typescript from '@chillcode/eslint-config/typescript';
 import react from '@chillcode/eslint-config/react';
+import antiSlop from '@chillcode/eslint-config/anti-slop';
 import globals from 'globals';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
@@ -9,6 +10,7 @@ export default [
   ...base,
   ...typescript,
   ...react,
+  ...antiSlop,
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

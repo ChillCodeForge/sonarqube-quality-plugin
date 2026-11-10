@@ -22,6 +22,7 @@ const Gauge: React.FC<GaugeProps> = ({
 
   // Determine color based on value
   let strokeColor = colors[0];
+
   if (value >= 75) strokeColor = colors[2];
   else if (value >= 50) strokeColor = colors[1];
 

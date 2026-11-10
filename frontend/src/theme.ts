@@ -13,6 +13,7 @@ export function injectTheme(): void {
   if (document.getElementById(STYLE_ID)) {
     return;
   }
+
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = themeCss;
