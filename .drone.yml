@@ -286,10 +286,12 @@ steps:
           # onto the PR head, so the local target branch equals HEAD. The
           # scanner resolves sonar.pullrequest.base to that local branch first,
           # finds 0 changed lines and drops every PR issue (gate always green,
-          # findings first show up on main). Detach HEAD (worktree unchanged)
-          # and point the local target branch back at the fetched remote one;
-          # a missing remote ref fails the step instead of scanning blind.
-          git -c safe.directory="$$PWD" checkout -q --detach
+          # findings first show up on main). Detach HEAD via update-ref (index
+          # and worktree untouched, no index.lock that a parallel git step on
+          # /shared/src could collide with) and point the local target branch
+          # back at the fetched remote one; a missing remote ref fails the
+          # step instead of scanning blind.
+          git -c safe.directory="$$PWD" update-ref --no-deref HEAD HEAD
           git -c safe.directory="$$PWD" update-ref "refs/heads/$${DRONE_TARGET_BRANCH}" "refs/remotes/origin/$${DRONE_TARGET_BRANCH}" || {
             echo "Error: refs/remotes/origin/$${DRONE_TARGET_BRANCH} is missing; cannot compute the PR's changed lines." >&2
             exit 1
