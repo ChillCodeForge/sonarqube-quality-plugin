@@ -46,6 +46,10 @@ Replacing a SonarQube plugin JAR requires a SonarQube restart or stack redeploym
 4. Redeploy or restart SonarQube through the configured `homelab-docker-compose/sonarqube/docker-compose.yaml` stack.
 5. Verify the startup log reports the plugin loading, then open the project Quality Dashboard and Mutation Testing pages.
 
+### Deployment from Drone
+
+The pipeline step `release-deploy-plugin` runs `.ci/deploy.sh`, which uploads the JAR to `infra-swarm` and runs `.ci/deploy-remote.sh` there. The key in the Drone secret `sonarqube_plugin_deploy_key` logs in as the SSH user `omarchy`, not as `ansible`. That account has passwordless sudo for the Docker Swarm commands and for the protected plugin directory, whose files stay owned by `ansible:ansible`. The remote script saves the previous JAR as `*.previous` during the rollout, forces a SonarQube service update, waits for `status: UP` and checks the installed JAR's SHA-256 against the build artifact. If any of that fails it restores the previous JAR (or removes the new one on a first install) and rolls out again; after success it deletes the backup. The mutation upload token is created once as the Swarm secret `sonarqube_mutation_upload_token`.
+
 The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are stored under the `projectKey` and `branch` submitted with the upload request; those request parameters override report metadata.
 
 The upload token is read once at startup from exactly `/run/secrets/chillcode_mutation_upload_token`. Outside Docker Swarm, write the token to that path, readable by the SonarQube user, before starting SonarQube; `/run` is usually cleared on reboot, so recreate it at boot (for example with a `systemd-tmpfiles` rule). Without it, upload and delete answer 503.
