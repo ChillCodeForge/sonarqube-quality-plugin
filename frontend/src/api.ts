@@ -2,10 +2,20 @@ import axios from 'axios';
 
 const API_BASE = '/api';
 
-type QualityHistoryPoint = {
+export type QualityHistoryPoint = {
   date: string;
   coverage?: number;
   mutation_score?: number;
+};
+
+export type QualityMeasure = {
+  key: string;
+  value: number;
+};
+
+type SonarMeasure = {
+  metric: string;
+  value?: string | number | null;
 };
 
 type SonarHistoryMeasure = {
@@ -13,7 +23,7 @@ type SonarHistoryMeasure = {
   history?: Array<{ date: string; value?: string | number | null }>;
 };
 
-export async function fetchQualityMetrics(componentKey: string): Promise<any[]> {
+export async function fetchQualityMetrics(componentKey: string): Promise<QualityMeasure[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/component`, {
       params: {
@@ -34,7 +44,16 @@ export async function fetchQualityMetrics(componentKey: string): Promise<any[]> 
       },
     });
 
-    return response.data.component?.measures || [];
+    // SonarQube answers { metric, value } with every value a string ("89.1",
+    // and "1.0" to "5.0" for a rating). The dashboard looks measures up by key
+    // and does arithmetic on them, so both are normalized here; a measure with
+    // no numeric value is left out and shows as missing.
+    const measures: SonarMeasure[] = response.data.component?.measures || [];
+
+    return measures
+      .filter((measure) => measure.value != null && measure.value !== '')
+      .map((measure) => ({ key: measure.metric, value: Number(measure.value) }))
+      .filter((measure) => Number.isFinite(measure.value));
   } catch (error) {
     console.error('Failed to fetch quality metrics:', error);
 
@@ -114,9 +133,16 @@ export async function fetchMutationSummary(
       language: data.language,
     };
   } catch (error) {
-    console.error('Failed to fetch mutation summary:', error);
+    // The backend answers 404 for a project the caller may not browse, on
+    // purpose the same as a project with no report. Anything else (a network
+    // failure, a 5xx) is a failed request, and the page says so instead of
+    // claiming there is no report.
+    // SAFETY: an axios rejection carries the response it got; any other thrown value has no response and falls through.
+    if ((error as { response?: { status?: number } } | null)?.response?.status === 404) {
+      return null;
+    }
 
-    return null;
+    throw error;
   }
 }
 

@@ -1,41 +1,76 @@
 import React, { useState, useEffect } from 'react';
+import HistoryChart from './components/HistoryChart';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from 'recharts';
-import MetricCard, { type Rating } from './components/MetricCard';
-import { fetchQualityMetrics, fetchQualityHistory } from './api';
-
-interface QualityMetric {
-  key: string;
-  name: string;
-  value: number | string;
-  rating?: Rating;
-  trend?: 'up' | 'down' | 'stable';
-}
+  fetchQualityMetrics,
+  fetchQualityHistory,
+  type QualityHistoryPoint,
+  type QualityMeasure,
+} from './api';
+import { toChartPoints } from './history';
+import { formatCount, formatPercent, ratingOf, type Rating } from './mutants';
 
 interface QualityDashboardProps {
   componentKey: string;
 }
 
-const SEVERITIES: readonly { readonly severity: string; readonly key: string }[] = [
-  { severity: 'Blocker', key: 'blocker_violations' },
-  { severity: 'Critical', key: 'critical_violations' },
-  { severity: 'Major', key: 'major_violations' },
-  { severity: 'Minor', key: 'minor_violations' },
-  { severity: 'Info', key: 'info_violations' },
+type TileKind = 'rating' | 'percent' | 'score';
+
+interface TileContent {
+  text: string;
+  rating: Rating | null;
+  note: string | null;
+}
+
+const TILES: readonly { readonly key: string; readonly label: string; readonly kind: TileKind }[] =
+  [
+    { key: 'reliability_rating', label: 'Reliability', kind: 'rating' },
+    { key: 'security_rating', label: 'Security', kind: 'rating' },
+    { key: 'sqale_rating', label: 'Maintainability', kind: 'rating' },
+    { key: 'coverage', label: 'Coverage', kind: 'percent' },
+    { key: 'duplicated_lines_density', label: 'Duplications', kind: 'percent' },
+    { key: 'mutation_score', label: 'Mutation score', kind: 'score' },
+  ];
+
+const SEVERITIES: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly key: string;
+}[] = [
+  { id: 'blocker', label: 'Blocker', key: 'blocker_violations' },
+  { id: 'critical', label: 'Critical', key: 'critical_violations' },
+  { id: 'major', label: 'Major', key: 'major_violations' },
+  { id: 'minor', label: 'Minor', key: 'minor_violations' },
+  { id: 'info', label: 'Info', key: 'info_violations' },
 ];
 
+// SonarQube reports a rating as 1 to 5, best first.
+const RATINGS: readonly Rating[] = ['A', 'B', 'C', 'D', 'E'];
+
+// A measure SonarQube did not return shows as a dash: a made-up "A" or "0%"
+// would read as a real result.
+function tileContent(kind: TileKind, value: number | undefined): TileContent {
+  if (value === undefined) {
+    return { text: '–', rating: null, note: null };
+  }
+
+  if (kind === 'rating') {
+    const rating = RATINGS[Math.round(value) - 1] ?? null;
+
+    return { text: rating ?? '–', rating, note: null };
+  }
+
+  if (kind === 'score') {
+    const rating = ratingOf(value);
+
+    return { text: formatPercent(value), rating, note: `Rating ${rating}` };
+  }
+
+  return { text: formatPercent(value), rating: null, note: null };
+}
+
 export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => {
-  const [metrics, setMetrics] = useState<QualityMetric[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<QualityMeasure[]>([]);
+  const [history, setHistory] = useState<QualityHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,161 +96,88 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
   if (loading) {
     return (
       <div className="cq-root">
-        <div className="cq-loading">
-          <span className="cq-spinner" /> Loading quality dashboard…
+        <div className="cq-card cq-pad" aria-busy="true">
+          <span className="cq-sr-only">Loading quality dashboard…</span>
+          <span className="cq-skeleton" style={{ width: '30%', height: 28, marginTop: 0 }} />
+          <span className="cq-skeleton" />
+          <span className="cq-skeleton" style={{ width: '82%' }} />
+          <span className="cq-skeleton" style={{ width: '64%' }} />
         </div>
       </div>
     );
   }
 
+  const valueOf = (key: string) => metrics.find((metric) => metric.key === key)?.value;
+  const issues = SEVERITIES.map((severity) => ({ ...severity, count: valueOf(severity.key) ?? 0 }));
+  const mostIssues = Math.max(1, ...issues.map((severity) => severity.count));
+  const analyses = toChartPoints(history);
+  const lastAnalysis = analyses.length > 0 ? analyses[analyses.length - 1] : null;
+
   return (
     <div className="cq-root">
-      <header className="cq-header">
-        <div className="cq-title-block">
-          <div className="cq-icon-badge">✨</div>
-          <div>
-            <h1>Quality Overview</h1>
-            <p className="cq-subtitle">Project health at a glance</p>
-          </div>
+      <header className="cq-head">
+        <div>
+          <h1 className="cq-h1">Quality Dashboard</h1>
+          <p className="cq-meta">
+            {lastAnalysis
+              ? `Last analysis ${new Date(lastAnalysis.time).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+              : 'Project health at a glance'}
+          </p>
         </div>
       </header>
 
-      <section className="cq-metrics-grid">
-        <MetricCard
-          title="Reliability"
-          value={metrics.find((m) => m.key === 'reliability_rating')?.value || 'A'}
-          rating={metrics.find((m) => m.key === 'reliability_rating')?.rating}
-          trend={metrics.find((m) => m.key === 'reliability_rating')?.trend}
-        />
-        <MetricCard
-          title="Security"
-          value={metrics.find((m) => m.key === 'security_rating')?.value || 'A'}
-          rating={metrics.find((m) => m.key === 'security_rating')?.rating}
-          trend={metrics.find((m) => m.key === 'security_rating')?.trend}
-        />
-        <MetricCard
-          title="Maintainability"
-          value={metrics.find((m) => m.key === 'sqale_rating')?.value || 'A'}
-          rating={metrics.find((m) => m.key === 'sqale_rating')?.rating}
-          trend={metrics.find((m) => m.key === 'sqale_rating')?.trend}
-        />
-        <MetricCard
-          title="Coverage"
-          value={`${metrics.find((m) => m.key === 'coverage')?.value || 0}%`}
-          rating={metrics.find((m) => m.key === 'coverage')?.rating}
-          trend={metrics.find((m) => m.key === 'coverage')?.trend}
-          color="var(--cq-blue)"
-        />
-        <MetricCard
-          title="Duplications"
-          value={`${metrics.find((m) => m.key === 'duplicated_lines_density')?.value || 0}%`}
-          rating={metrics.find((m) => m.key === 'duplicated_lines_density')?.rating}
-          trend={metrics.find((m) => m.key === 'duplicated_lines_density')?.trend}
-          color="var(--cq-violet)"
-        />
-        <MetricCard
-          title="Mutation Score"
-          value={`${metrics.find((m) => m.key === 'mutation_score')?.value || 0}%`}
-          rating={metrics.find((m) => m.key === 'mutation_score')?.rating}
-          trend={metrics.find((m) => m.key === 'mutation_score')?.trend}
-          color="var(--cq-green)"
-        />
+      <section className="cq-tiles" aria-label="Measures">
+        {TILES.map((tile) => {
+          const content = tileContent(tile.kind, valueOf(tile.key));
+
+          return (
+            <div key={tile.key} className="cq-tile" data-rating={content.rating ?? undefined}>
+              <span className="cq-tile-label">{tile.label}</span>
+              <span className="cq-tile-value">{content.text}</span>
+              {content.note && <span className="cq-tile-note">{content.note}</span>}
+            </div>
+          );
+        })}
       </section>
 
-      <section className="cq-charts-grid">
-        <div className="cq-chart-card">
-          <h2>Quality History (Last 30 Days)</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={history}>
-              <defs>
-                <linearGradient id="colorCoverage" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--cq-blue)" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="var(--cq-blue)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorMutation" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--cq-green)" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="var(--cq-green)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="date"
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <YAxis
-                domain={[0, 100]}
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 10,
-                  border: '1px solid var(--cq-border)',
-                  background: 'var(--cq-surface)',
-                  color: 'var(--cq-text)',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="coverage"
-                stroke="var(--cq-blue)"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorCoverage)"
-                name="Coverage %"
-              />
-              <Area
-                type="monotone"
-                dataKey="mutation_score"
-                stroke="var(--cq-green)"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorMutation)"
-                name="Mutation Score %"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="cq-cols">
+        <section className="cq-card">
+          <div className="cq-cardhead">
+            <div>
+              <h2 className="cq-h2">Coverage and mutation score</h2>
+              <span className="cq-help">
+                {`${formatCount(history.length)} ${history.length === 1 ? 'analysis' : 'analyses'} in the last 30 days`}
+              </span>
+            </div>
+          </div>
+          <HistoryChart history={history} />
+        </section>
 
-        <div className="cq-chart-card">
-          <h2>Issues by Severity</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart
-              data={SEVERITIES.map(({ severity, key }) => ({
-                severity,
-                count: metrics.find((m) => m.key === key)?.value || 0,
-              }))}
-            >
-              <XAxis
-                dataKey="severity"
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <YAxis
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 10,
-                  border: '1px solid var(--cq-border)',
-                  background: 'var(--cq-surface)',
-                  color: 'var(--cq-text)',
-                }}
-              />
-              <Bar
-                dataKey="count"
-                fill="var(--cq-red)"
-                name="Issues"
-                radius={[8, 8, 0, 0]}
-                maxBarSize={56}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+        <section className="cq-card">
+          <div className="cq-cardhead">
+            <h2 className="cq-h2">
+              Open issues by severity
+              <span className="cq-count">
+                {formatCount(issues.reduce((sum, severity) => sum + severity.count, 0))}
+              </span>
+            </h2>
+          </div>
+          {issues.map((severity) => (
+            <div key={severity.id} className="cq-severity" data-severity={severity.id}>
+              <i className="cq-severity-dot" />
+              <span>{severity.label}</span>
+              <span className="cq-severity-track">
+                <i style={{ width: `${(severity.count / mostIssues) * 100}%` }} />
+              </span>
+              <span
+                className={severity.count > 0 ? 'cq-severity-count' : 'cq-severity-count cq-zero'}
+              >
+                {formatCount(severity.count)}
+              </span>
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 };

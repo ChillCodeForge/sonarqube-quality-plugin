@@ -13,13 +13,30 @@ describe('SonarQube API helpers', () => {
   beforeEach(() => vi.mocked(axios.get).mockReset());
   afterEach(() => vi.restoreAllMocks());
 
-  it('fetches quality measures and returns an empty list when the component is absent', async () => {
+  it('reads SonarQube measures by metric, as numbers, and drops one with no numeric value', async () => {
     vi.mocked(axios.get).mockResolvedValueOnce({
-      data: { component: { measures: [{ metric: 'coverage' }] } },
+      data: {
+        component: {
+          measures: [
+            { metric: 'coverage', value: '100.0', bestValue: true },
+            { metric: 'reliability_rating', value: '1.0' },
+            { metric: 'mutation_score', value: 89.1 },
+            { metric: 'blocker_violations', value: '0' },
+            { metric: 'security_rating' },
+            { metric: 'sqale_rating', value: '' },
+            { metric: 'info_violations', value: 'many' },
+          ],
+        },
+      },
     });
     vi.mocked(axios.get).mockResolvedValueOnce({ data: {} });
 
-    await expect(fetchQualityMetrics('app')).resolves.toEqual([{ metric: 'coverage' }]);
+    await expect(fetchQualityMetrics('app')).resolves.toEqual([
+      { key: 'coverage', value: 100 },
+      { key: 'reliability_rating', value: 1 },
+      { key: 'mutation_score', value: 89.1 },
+      { key: 'blocker_violations', value: 0 },
+    ]);
     await expect(fetchQualityMetrics('missing')).resolves.toEqual([]);
     expect(axios.get).toHaveBeenNthCalledWith(1, '/api/measures/component', {
       params: expect.objectContaining({
@@ -95,7 +112,7 @@ describe('SonarQube API helpers', () => {
     await expect(fetchQualityHistory('app')).resolves.toEqual([]);
   });
 
-  it('maps mutation summary fields and returns null for missing reports or failures', async () => {
+  it('maps mutation summary fields, reads a missing report as null, and lets a failure through', async () => {
     vi.mocked(axios.get)
       .mockResolvedValueOnce({
         data: {
@@ -112,8 +129,10 @@ describe('SonarQube API helpers', () => {
       })
       .mockResolvedValueOnce({ data: { hasReport: false } })
       .mockResolvedValueOnce({ data: null })
-      .mockRejectedValueOnce(new Error('offline'));
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 503 } })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(null);
 
     await expect(fetchMutationSummary('app')).resolves.toEqual({
       score: 81,
@@ -129,6 +148,9 @@ describe('SonarQube API helpers', () => {
     await expect(fetchMutationSummary('app')).resolves.toBeNull();
     await expect(fetchMutationSummary('app')).resolves.toBeNull();
     await expect(fetchMutationSummary('app')).resolves.toBeNull();
+    await expect(fetchMutationSummary('app')).rejects.toEqual({ response: { status: 503 } });
+    await expect(fetchMutationSummary('app')).rejects.toThrow('offline');
+    await expect(fetchMutationSummary('app')).rejects.toBeNull();
   });
 
   it('fetches mutation reports and returns null if download fails', async () => {

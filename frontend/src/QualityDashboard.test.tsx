@@ -4,43 +4,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchQualityHistory, fetchQualityMetrics } from './api';
 import QualityDashboard from './QualityDashboard';
 
-const captureAreaData = vi.hoisted(() => vi.fn());
+const captureHistory = vi.hoisted(() => vi.fn());
 
 vi.mock('./api', () => ({
   fetchQualityHistory: vi.fn(),
   fetchQualityMetrics: vi.fn(),
 }));
 
-vi.mock('recharts', () => {
-  const withChildren = ({ children }: { children?: React.ReactNode }) => children;
-  const empty = () => null;
-
-  const areaChart = ({ data }: { data: unknown }) => {
-    captureAreaData(data);
+vi.mock('./components/HistoryChart', () => ({
+  default: ({ history }: { history: unknown }) => {
+    captureHistory(history);
 
     return null;
-  };
+  },
+}));
 
-  return {
-    AreaChart: areaChart,
-    Bar: empty,
-    BarChart: empty,
-    CartesianGrid: empty,
-    Cell: empty,
-    Legend: empty,
-    Pie: empty,
-    PieChart: empty,
-    ResponsiveContainer: withChildren,
-    Tooltip: empty,
-    XAxis: empty,
-    YAxis: empty,
-    Area: empty,
-  };
-});
+const tile = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+
+const issueCount = (label: string) =>
+  (screen.getByText(label).parentElement as HTMLElement).querySelector('.cq-severity-count');
 
 describe('QualityDashboard', () => {
   beforeEach(() => {
-    captureAreaData.mockClear();
+    captureHistory.mockClear();
     vi.mocked(fetchQualityMetrics).mockReset();
     vi.mocked(fetchQualityHistory).mockReset();
     vi.mocked(fetchQualityMetrics).mockResolvedValue([]);
@@ -49,7 +35,7 @@ describe('QualityDashboard', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('shows loading while both Sonar requests are pending, then renders metric values', async () => {
+  it('shows loading while both Sonar requests are pending, then renders the measures', async () => {
     type Metrics = Awaited<ReturnType<typeof fetchQualityMetrics>>;
 
     type History = Awaited<ReturnType<typeof fetchQualityHistory>>;
@@ -71,38 +57,61 @@ describe('QualityDashboard', () => {
     expect(screen.getByText(/Loading quality dashboard/)).toBeDefined();
 
     finishMetrics([
-      { key: 'reliability_rating', value: 'B', rating: 'B', trend: 'down' },
-      { key: 'security_rating', value: 'A', rating: 'A', trend: 'stable' },
-      { key: 'sqale_rating', value: 'C', rating: 'C', trend: 'up' },
-      { key: 'coverage', value: 91.4, rating: 'A', trend: 'up' },
-      { key: 'duplicated_lines_density', value: 2, rating: 'A', trend: 'stable' },
-      { key: 'mutation_score', value: 84, rating: 'B', trend: 'up' },
+      { key: 'reliability_rating', value: 2 },
+      { key: 'security_rating', value: 1 },
+      { key: 'sqale_rating', value: 9 },
+      { key: 'coverage', value: 91.4 },
+      { key: 'duplicated_lines_density', value: 2 },
+      { key: 'mutation_score', value: 84 },
       { key: 'blocker_violations', value: 1 },
-      { key: 'critical_violations', value: 2 },
       { key: 'major_violations', value: 3 },
-      { key: 'minor_violations', value: 4 },
-      { key: 'info_violations', value: 5 },
     ]);
-    finishHistory([{ date: '2026-10-20', coverage: 91.4, mutation_score: 84 }]);
+    finishHistory([
+      { date: '2026-10-21T08:00:00+0000', coverage: 91.4, mutation_score: 84 },
+      { date: '2026-10-20T08:00:00+0000', coverage: 90 },
+    ]);
 
-    expect(await screen.findByText('Quality Overview')).toBeDefined();
-    expect(captureAreaData).toHaveBeenLastCalledWith([
-      { date: '2026-10-20', coverage: 91.4, mutation_score: 84 },
-    ]);
-    expect(screen.getByText('91.4%')).toBeDefined();
-    expect(screen.getByText('2%')).toBeDefined();
-    expect(screen.getByText('84%')).toBeDefined();
+    expect(await screen.findByText('Quality Dashboard')).toBeDefined();
     expect(fetchQualityMetrics).toHaveBeenCalledWith('quality-project');
     expect(fetchQualityHistory).toHaveBeenCalledWith('quality-project');
-    expect(screen.getByText('Issues by Severity')).toBeDefined();
+    expect(screen.getByText(/^Last analysis .*2026/)).toBeDefined();
+
+    expect(tile('Reliability').textContent).toBe('ReliabilityB');
+    expect(tile('Reliability').getAttribute('data-rating')).toBe('B');
+    expect(tile('Security').getAttribute('data-rating')).toBe('A');
+    expect(tile('Maintainability').textContent).toBe('Maintainability–');
+    expect(tile('Maintainability').getAttribute('data-rating')).toBeNull();
+    expect(tile('Coverage').textContent).toBe('Coverage91.4%');
+    expect(tile('Coverage').getAttribute('data-rating')).toBeNull();
+    expect(tile('Duplications').textContent).toBe('Duplications2.0%');
+    expect(tile('Mutation score').textContent).toBe('Mutation score84.0%Rating B');
+    expect(tile('Mutation score').getAttribute('data-rating')).toBe('B');
+
+    expect(screen.getByText('2 analyses in the last 30 days')).toBeDefined();
+    expect(captureHistory).toHaveBeenLastCalledWith([
+      { date: '2026-10-21T08:00:00+0000', coverage: 91.4, mutation_score: 84 },
+      { date: '2026-10-20T08:00:00+0000', coverage: 90 },
+    ]);
+
+    expect(screen.getByText('Open issues by severity').textContent).toBe(
+      'Open issues by severity4',
+    );
+    expect(issueCount('Blocker')?.textContent).toBe('1');
+    expect(issueCount('Major')?.className).toBe('cq-severity-count');
+    expect(issueCount('Minor')?.className).toBe('cq-severity-count cq-zero');
   });
 
-  it('uses fallback values when no metrics are returned', async () => {
+  it('shows a dash, never a made-up value, for a measure SonarQube did not return', async () => {
+    vi.mocked(fetchQualityHistory).mockResolvedValueOnce([
+      { date: '2026-10-21T08:00:00+0000', coverage: 91.4 },
+    ]);
     render(<QualityDashboard componentKey="empty-project" />);
 
-    expect(await screen.findByText('Quality Overview')).toBeDefined();
-    expect(screen.getAllByText('A').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('0%')).toHaveLength(3);
+    expect(await screen.findByText('Quality Dashboard')).toBeDefined();
+    expect(screen.getAllByText('–')).toHaveLength(6);
+    expect(screen.queryByText('A')).toBeNull();
+    expect(screen.getByText('1 analysis in the last 30 days')).toBeDefined();
+    expect(issueCount('Info')?.textContent).toBe('0');
   });
 
   it('logs failed loading requests and still leaves the loading state', async () => {
@@ -111,7 +120,8 @@ describe('QualityDashboard', () => {
 
     render(<QualityDashboard componentKey="offline-project" />);
 
-    expect(await screen.findByText('Quality Overview')).toBeDefined();
+    expect(await screen.findByText('Quality Dashboard')).toBeDefined();
+    expect(screen.getByText('Project health at a glance')).toBeDefined();
     expect(error).toHaveBeenCalledWith('Failed to load quality data:', expect.any(Error));
   });
 });

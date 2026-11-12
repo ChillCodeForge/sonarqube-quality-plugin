@@ -1,21 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-import Gauge from './components/Gauge';
-import MetricCard, { type Rating } from './components/MetricCard';
-import MutantTable from './components/MutantTable';
+import React, { useEffect, useMemo, useState } from 'react';
+import FileList from './components/FileList';
+import Icon from './components/Icon';
+import MutantBar from './components/MutantBar';
+import MutantList from './components/MutantList';
+import RatingBadge from './components/RatingBadge';
 import { fetchMutationReport, fetchMutationSummary } from './api';
+import {
+  STATUS_LABELS,
+  STATUS_ORDER,
+  countsFromTotals,
+  filterFiles,
+  formatCount,
+  formatPercent,
+  plural,
+  ratingOf,
+  reportDate,
+  sortFiles,
+  statusOf,
+  toFileView,
+  type FileSort,
+  type FileView,
+  type MutationFile,
+  type StatusKey,
+} from './mutants';
 
 interface MutationSummary {
   score: number;
@@ -29,37 +36,50 @@ interface MutationSummary {
   language: string;
 }
 
-interface MutationFile {
-  path: string;
-  language: string;
-  mutants: any[];
-  metrics: any;
-}
-
 interface MutationTestingProps {
   projectKey: string;
   branch?: string;
 }
 
-const COLORS = {
-  killed: '#2ee6ac',
-  survived: '#ff5252',
-  noCoverage: '#ffb84d',
-  timeout: '#9a90ff',
-  ignored: '#5b9dff',
-};
+type Tab = StatusKey | 'all';
+
+// A file opens on what still needs a test; killed mutants come last.
+const TAB_ORDER: readonly StatusKey[] = [
+  'survived',
+  'noCoverage',
+  'timeout',
+  'unknown',
+  'ignored',
+  'killed',
+];
+
+const OPEN_STATUSES: readonly StatusKey[] = ['survived', 'noCoverage', 'timeout', 'unknown'];
+
+function tabsOf(file: FileView): Tab[] {
+  return [...TAB_ORDER.filter((status) => file.counts[status] > 0), 'all'];
+}
+
+function defaultTab(file: FileView): Tab {
+  return OPEN_STATUSES.find((status) => file.counts[status] > 0) ?? 'all';
+}
 
 const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 'main' }) => {
   const [summary, setSummary] = useState<MutationSummary | null>(null);
   const [files, setFiles] = useState<MutationFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<MutationFile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [reportedOn, setReportedOn] = useState<Date | null>(null);
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+  const [sort, setSort] = useState<FileSort>('survivors');
+  const [tab, setTab] = useState<Tab | null>(null);
 
   useEffect(() => {
     loadData();
   }, [projectKey, branch]);
 
   const loadData = async () => {
+    setPhase('loading');
+
     try {
       const [summaryData, reportData] = await Promise.all([
         fetchMutationSummary(projectKey, branch),
@@ -67,22 +87,45 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
       ]);
 
       setSummary(summaryData);
-
-      if (reportData?.files) {
-        setFiles(reportData.files);
-      }
+      setFiles(Array.isArray(reportData?.files) ? reportData.files : []);
+      setReportedOn(reportDate(reportData?.timestamp));
+      setPhase('ready');
     } catch (error) {
       console.error('Failed to load mutation data:', error);
-    } finally {
-      setLoading(false);
+      setPhase('failed');
     }
   };
 
-  if (loading) {
+  const views = useMemo(() => files.map(toFileView), [files]);
+  const visible = useMemo(() => sortFiles(filterFiles(views, filter), sort), [views, filter, sort]);
+
+  if (phase === 'loading') {
     return (
       <div className="cq-root">
-        <div className="cq-loading">
-          <span className="cq-spinner" /> Loading mutation testing results…
+        <div className="cq-card cq-pad" aria-busy="true">
+          <span className="cq-sr-only">Loading mutation testing results…</span>
+          <span className="cq-skeleton" style={{ width: '30%', height: 28, marginTop: 0 }} />
+          <span className="cq-skeleton" />
+          <span className="cq-skeleton" style={{ width: '82%' }} />
+          <span className="cq-skeleton" style={{ width: '64%' }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'failed') {
+    return (
+      <div className="cq-root">
+        <div className="cq-card">
+          <div className="cq-state cq-state-failed" role="alert">
+            <Icon name="alert" />
+            <h1 className="cq-h2">The mutation report did not load</h1>
+            <p>SonarQube did not answer the request for {branch}.</p>
+            <button type="button" className="cq-button" onClick={loadData}>
+              <Icon name="retry" />
+              Try again
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -91,249 +134,122 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
   if (summary?.score == null) {
     return (
       <div className="cq-root">
-        <div className="cq-empty">No mutation testing data available for this project</div>
+        <div className="cq-card">
+          <div className="cq-state">
+            <Icon name="file" />
+            <h1 className="cq-h2">No mutation report for {branch}</h1>
+            <p>
+              Upload one from CI with{' '}
+              <code className="cq-code">scripts/upload-mutation-report.sh</code>
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
+  const counts = countsFromTotals(summary);
+  const selected = visible.find((file) => file.path === selectedPath) ?? visible[0] ?? null;
+  const tabs = selected ? tabsOf(selected) : [];
+  const activeTab = selected && tab && tabs.includes(tab) ? tab : selected && defaultTab(selected);
+  const shownMutants =
+    selected?.mutants.filter(
+      (mutant) => activeTab === 'all' || statusOf(mutant.status) === activeTab,
+    ) ?? [];
+
   return (
     <div className="cq-root">
-      <header className="cq-header">
-        <div className="cq-title-block">
-          <div className="cq-icon-badge">🧬</div>
-          <div>
-            <h1>Mutation Testing</h1>
-            <p className="cq-subtitle">
-              {summary.tool} · {summary.language} · {summary.total} mutants
-            </p>
-          </div>
+      <header className="cq-head">
+        <div>
+          <h1 className="cq-h1">Mutation Testing</h1>
+          <p className="cq-meta">
+            <span className="cq-tool">{summary.tool}</span>
+            {` · ${plural(summary.total, 'mutant')} in ${plural(views.length, 'file')}`}
+            {reportedOn &&
+              ` · report of ${reportedOn.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}
+          </p>
         </div>
-        <span className="cq-pill">{getRating(summary.score)} rating</span>
+        <div className="cq-score">
+          <div>
+            <div className="cq-label">Mutation score</div>
+            <div className="cq-big">{formatPercent(summary.score)}</div>
+          </div>
+          <RatingBadge rating={ratingOf(summary.score)} large />
+        </div>
       </header>
 
-      <section className="cq-summary-grid">
-        <div
-          className="cq-metric-card cq-gauge-card"
-          style={
-            // SAFETY: React.CSSProperties has no index signature for custom properties; '--cq-accent' is a valid CSS variable.
-            { '--cq-accent': ratingColor(getRating(summary.score)) } as React.CSSProperties
-          }
-        >
-          <Gauge
-            value={summary.score}
-            size={84}
-            strokeWidth={9}
-            colors={[COLORS.survived, COLORS.noCoverage, COLORS.killed]}
-          />
-          <div>
-            <div className="cq-metric-title">Mutation Score</div>
-            <div className="cq-metric-value">
-              {summary.score.toFixed(1)}%
-              <span
-                className="cq-metric-rating"
-                style={{ backgroundColor: ratingColor(getRating(summary.score)) }}
-              >
-                {getRating(summary.score)}
-              </span>
+      <section className="cq-card cq-pad" aria-label="Mutants by status">
+        <MutantBar counts={counts} size="large" />
+        <dl className="cq-legend">
+          {STATUS_ORDER.filter((status) => counts[status] > 0).map((status) => (
+            <div key={status}>
+              <Icon name={status} status={status} />
+              <dt>{STATUS_LABELS[status]}</dt>
+              <dd>{formatCount(counts[status])}</dd>
             </div>
+          ))}
+        </dl>
+      </section>
+
+      {views.length === 0 ? (
+        <section className="cq-card">
+          <div className="cq-state">
+            <Icon name="file" />
+            <h2 className="cq-h2">This report lists no files</h2>
           </div>
-        </div>
-        <MetricCard title="Total Mutants" value={summary.total} />
-        <MetricCard title="Killed" value={summary.killed} color={COLORS.killed} />
-        <MetricCard title="Survived" value={summary.survived} color={COLORS.survived} />
-        <MetricCard title="No Coverage" value={summary.noCoverage} color={COLORS.noCoverage} />
-        <MetricCard title="Timeout" value={summary.timeout} color={COLORS.timeout} />
-        <MetricCard title="Ignored" value={summary.ignored} color={COLORS.ignored} />
-      </section>
-
-      <section className="cq-charts-grid">
-        <div className="cq-chart-card">
-          <h2>Mutant Status Distribution</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            {(() => {
-              const statusData = [
-                { name: 'Killed', value: summary.killed, color: COLORS.killed },
-                { name: 'Survived', value: summary.survived, color: COLORS.survived },
-                { name: 'No Coverage', value: summary.noCoverage, color: COLORS.noCoverage },
-                { name: 'Timeout', value: summary.timeout, color: COLORS.timeout },
-                { name: 'Ignored', value: summary.ignored, color: COLORS.ignored },
-              ].filter((item) => item.value > 0);
-
-              if (statusData.length === 0) {
-                return (
-                  <div
-                    style={{
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--cq-text-muted)',
-                      fontSize: 13,
-                    }}
+        </section>
+      ) : (
+        <section className="cq-card cq-split">
+          <FileList
+            files={visible}
+            selectedPath={selected?.path ?? null}
+            filter={filter}
+            sort={sort}
+            onSelect={(path) => {
+              setSelectedPath(path);
+              setTab(null);
+            }}
+            onFilter={setFilter}
+            onSort={setSort}
+          />
+          {selected && (
+            <section aria-label={`Mutants in ${selected.path}`}>
+              <div className="cq-detailhead">
+                <h2 className="cq-path" title={selected.path}>
+                  <span className="cq-path-dir">{selected.directory}</span>
+                  <span className="cq-path-name">{selected.name}</span>
+                </h2>
+                <b>{selected.score === null ? 'N/A' : formatPercent(selected.score)}</b>
+                {selected.rating && <RatingBadge rating={selected.rating} />}
+              </div>
+              <div className="cq-detailbar">
+                <MutantBar counts={selected.counts} />
+              </div>
+              <div className="cq-tabs" role="tablist" aria-label="Mutants shown">
+                {tabs.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="tab"
+                    className="cq-tab"
+                    aria-selected={option === activeTab}
+                    onClick={() => setTab(option)}
                   >
-                    No mutant data available
-                  </div>
-                );
-              }
-
-              return (
-                <PieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={statusData.length > 1 ? 3 : 0}
-                    cornerRadius={5}
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                  >
-                    {statusData.map((entry) => (
-                      <Cell
-                        key={`cell-${entry.name}`}
-                        fill={entry.color}
-                        style={{ fill: entry.color }}
-                        stroke="var(--cq-surface)"
-                        strokeWidth={2}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: '1px solid var(--cq-border)',
-                      background: 'var(--cq-surface)',
-                      color: 'var(--cq-text)',
-                    }}
-                    formatter={(value: number | string, name: string) => [`${value} Mutants`, name]}
-                  />
-                  <Legend
-                    verticalAlign="bottom"
-                    iconType="circle"
-                    wrapperStyle={{ paddingTop: 8, fontSize: 12, color: 'var(--cq-text-muted)' }}
-                  />
-                </PieChart>
-              );
-            })()}
-          </ResponsiveContainer>
-        </div>
-
-        <div className="cq-chart-card">
-          <h2>Mutation Score</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={[{ label: 'Current', score: summary.score }]}>
-              <XAxis
-                dataKey="label"
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <YAxis
-                domain={[0, 100]}
-                tick={{ fill: 'var(--cq-text-muted)', fontSize: 12 }}
-                axisLine={{ stroke: 'var(--cq-border)' }}
-              />
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--cq-border)" />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 10,
-                  border: '1px solid var(--cq-border)',
-                  background: 'var(--cq-surface)',
-                  color: 'var(--cq-text)',
-                }}
-              />
-              <Bar
-                dataKey="score"
-                fill={COLORS.killed}
-                name="Score %"
-                radius={[8, 8, 0, 0]}
-                maxBarSize={72}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      <section className="cq-files-section">
-        <h2>Files ({files.length})</h2>
-        <div className="cq-files-table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Language</th>
-                <th>Mutants</th>
-                <th>Score</th>
-                <th>Killed</th>
-                <th>Survived</th>
-                <th>No Coverage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((file) => (
-                <tr
-                  key={file.path}
-                  onClick={() => setSelectedFile(file)}
-                  className={selectedFile === file ? 'cq-selected' : ''}
-                >
-                  <td>{file.path}</td>
-                  <td>{file.language}</td>
-                  <td>{file.mutants?.length || 0}</td>
-                  <td>{file.metrics?.score?.toFixed(1) || 'N/A'}%</td>
-                  <td style={{ color: COLORS.killed, fontWeight: 600 }}>
-                    {file.metrics?.killed || 0}
-                  </td>
-                  <td style={{ color: COLORS.survived, fontWeight: 600 }}>
-                    {file.metrics?.survived || 0}
-                  </td>
-                  <td style={{ color: COLORS.noCoverage, fontWeight: 600 }}>
-                    {file.metrics?.noCoverage || 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {selectedFile && (
-        <section className="cq-mutants-detail">
-          <div className="cq-detail-header">
-            <h3>Mutants in {selectedFile.path}</h3>
-            <button className="cq-close-btn" onClick={() => setSelectedFile(null)}>
-              Close
-            </button>
-          </div>
-          <MutantTable mutants={selectedFile.mutants || []} />
+                    {option !== 'all' && <Icon name={option} status={option} />}
+                    {option === 'all' ? 'All' : STATUS_LABELS[option]}
+                    <span className="cq-count">
+                      {formatCount(option === 'all' ? selected.total : selected.counts[option])}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <MutantList key={`${selected.path}:${activeTab}`} mutants={shownMutants} />
+            </section>
+          )}
         </section>
       )}
     </div>
   );
 };
-
-function getRating(score: number): Rating {
-  if (score >= 90) return 'A';
-
-  if (score >= 75) return 'B';
-
-  if (score >= 60) return 'C';
-
-  if (score >= 40) return 'D';
-
-  return 'E';
-}
-
-function ratingColor(rating: Rating): string {
-  const colors: Record<Rating, string> = {
-    A: 'var(--cq-green)',
-    B: 'var(--cq-blue)',
-    C: 'var(--cq-amber)',
-    D: 'var(--cq-red)',
-    E: 'var(--cq-red-deep)',
-  };
-
-  return colors[rating];
-}
 
 export default MutationTesting;

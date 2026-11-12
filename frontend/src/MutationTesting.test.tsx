@@ -1,68 +1,19 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchMutationReport, fetchMutationSummary } from './api';
 import MutationTesting from './MutationTesting';
-
-const chartCallbacks = vi.hoisted(() => ({
-  pieLabels: [] as string[],
-  paddingAngle: null as number | null,
-  tooltipResult: null as [string, string] | null,
-}));
 
 vi.mock('./api', () => ({
   fetchMutationReport: vi.fn(),
   fetchMutationSummary: vi.fn(),
 }));
 
-vi.mock('recharts', () => {
-  const withChildren = ({ children }: { children?: React.ReactNode }) => children;
-  const empty = () => null;
-
-  return {
-    Bar: empty,
-    BarChart: empty,
-    CartesianGrid: empty,
-    Cell: empty,
-    Legend: empty,
-    Pie: ({
-      data,
-      label,
-      paddingAngle,
-    }: {
-      data: { name: string; value: number }[];
-      label: (entry: { name: string; percent: number }) => string;
-      paddingAngle: number;
-    }) => {
-      const total = data.reduce((sum, entry) => sum + entry.value, 0);
-      chartCallbacks.pieLabels = data.map((entry) =>
-        label({ name: entry.name, percent: entry.value / total }),
-      );
-      chartCallbacks.paddingAngle = paddingAngle;
-
-      return null;
-    },
-    PieChart: withChildren,
-    ResponsiveContainer: withChildren,
-    Tooltip: ({
-      formatter,
-    }: {
-      formatter: (value: number | string, name: string) => [string, string];
-    }) => {
-      chartCallbacks.tooltipResult = formatter(2, 'Killed');
-
-      return null;
-    },
-    XAxis: empty,
-    YAxis: empty,
-  };
-});
-
 const completeSummary = {
   score: 95,
-  total: 3,
-  killed: 2,
-  survived: 1,
+  total: 6,
+  killed: 3,
+  survived: 2,
   noCoverage: 0,
   timeout: 0,
   ignored: 0,
@@ -70,32 +21,40 @@ const completeSummary = {
   language: 'typescript',
 };
 
-const reportWithFile = {
+const mutant = (id: string, status: string, mutatorName: string) => ({
+  id,
+  mutatorName,
+  replacement: 'false',
+  status,
+  location: { start: { line: 4, column: 2 } },
+});
+
+const report = {
+  timestamp: [2026, 10, 3, 1, 39],
   files: [
     {
-      path: 'src/mutant.ts',
-      language: 'typescript',
-      metrics: { score: 66.7, killed: 2, survived: 1, noCoverage: 0 },
+      path: 'src/clean.ts',
+      metrics: { score: 100, total: 1, killed: 1 },
+      mutants: [mutant('clean-1', 'KILLED', 'BooleanLiteral')],
+    },
+    {
+      path: 'src/checks/mutant.ts',
+      metrics: { score: 50, total: 4, killed: 2, survived: 2 },
       mutants: [
-        {
-          id: 'mutant-1',
-          mutatorName: 'BooleanLiteral',
-          replacement: 'false',
-          status: 'KILLED',
-          statusReason: 'Killed by test',
-          coveredBy: ['MutationTest'],
-          static: false,
-        },
+        mutant('m-1', 'SURVIVED', 'Regex'),
+        mutant('m-2', 'SURVIVED', 'BlockStatement'),
+        mutant('m-3', 'KILLED', 'StringLiteral'),
+        mutant('m-4', 'KILLED', 'ArrowFunction'),
       ],
     },
   ],
 };
 
+const detail = () => screen.getByRole('region', { name: /^Mutants in / });
+const tab = (name: RegExp) => screen.getByRole('tab', { name });
+
 describe('MutationTesting', () => {
   beforeEach(() => {
-    chartCallbacks.pieLabels = [];
-    chartCallbacks.paddingAngle = null;
-    chartCallbacks.tooltipResult = null;
     vi.mocked(fetchMutationSummary).mockReset();
     vi.mocked(fetchMutationReport).mockReset();
     vi.mocked(fetchMutationSummary).mockResolvedValue(completeSummary);
@@ -104,87 +63,102 @@ describe('MutationTesting', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('loads branch-specific results and opens then closes a file mutant table', async () => {
-    vi.mocked(fetchMutationReport).mockResolvedValueOnce(reportWithFile);
+  it('loads the branch report and opens on the file with the most survivors', async () => {
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
     render(<MutationTesting projectKey="mutation-project" branch="feature/x" />);
 
     expect(screen.getByText(/Loading mutation testing results/)).toBeDefined();
     expect(await screen.findByText('Mutation Testing')).toBeDefined();
-    expect(chartCallbacks.pieLabels).toEqual(['Killed: 66.7%', 'Survived: 33.3%']);
-    expect(chartCallbacks.tooltipResult).toEqual(['2 Mutants', 'Killed']);
-    expect(chartCallbacks.paddingAngle).toBe(3);
-    expect(screen.getByText('stryker · typescript · 3 mutants')).toBeDefined();
-    expect(screen.getByText('Files (1)')).toBeDefined();
     expect(fetchMutationSummary).toHaveBeenCalledWith('mutation-project', 'feature/x');
     expect(fetchMutationReport).toHaveBeenCalledWith('mutation-project', 'feature/x');
 
-    fireEvent.click(screen.getByText('src/mutant.ts'));
-    expect(screen.getByText('Mutants in src/mutant.ts')).toBeDefined();
-    expect(screen.getByText('mutant-1')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(screen.queryByText('Mutants in src/mutant.ts')).toBeNull();
+    expect(screen.getByText('stryker').parentElement?.textContent).toMatch(
+      /^stryker · 6 mutants in 2 files · report of .*2026/,
+    );
+    expect(
+      screen.getByRole('img', { name: '3 killed, 2 survived, 1 unknown' }).className,
+    ).toContain('cq-bar-large');
+    expect(screen.getByRole('region', { name: 'Mutants in src/checks/mutant.ts' })).toBeDefined();
+    expect(tab(/Survived/).getAttribute('aria-selected')).toBe('true');
+    expect(within(detail()).getByText('Regex')).toBeDefined();
+    expect(within(detail()).queryByText('StringLiteral')).toBeNull();
+  });
+
+  it('switches the status shown, then the file, and starts the new file on its own default', async () => {
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
+    render(<MutationTesting projectKey="mutation-project" />);
+    await screen.findByText('Mutation Testing');
+
+    fireEvent.click(tab(/Killed/));
+    expect(within(detail()).getByText('StringLiteral')).toBeDefined();
+    expect(within(detail()).queryByText('Regex')).toBeNull();
+
+    fireEvent.click(tab(/All/));
+    expect(within(detail()).getAllByRole('listitem')).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole('button', { name: /clean\.ts/ }));
+    expect(screen.getByRole('region', { name: 'Mutants in src/clean.ts' })).toBeDefined();
+    expect(tab(/All/).getAttribute('aria-selected')).toBe('true');
+    expect(within(detail()).getByText('BooleanLiteral')).toBeDefined();
+  });
+
+  it('filters and sorts the file list, falling back to the first file left', async () => {
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
+    render(<MutationTesting projectKey="mutation-project" />);
+    await screen.findByText('Mutation Testing');
+    const fileNames = () =>
+      within(screen.getByRole('complementary', { name: 'Files' }))
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('title'));
+
+    expect(fileNames()).toEqual(['src/checks/mutant.ts', 'src/clean.ts']);
+
+    fireEvent.change(screen.getByLabelText('Sort files'), { target: { value: 'path' } });
+    expect(fileNames()).toEqual(['src/checks/mutant.ts', 'src/clean.ts']);
+    fireEvent.change(screen.getByLabelText('Sort files'), { target: { value: 'mutants' } });
+    expect(fileNames()).toEqual(['src/checks/mutant.ts', 'src/clean.ts']);
+
+    fireEvent.change(screen.getByLabelText('Filter files'), { target: { value: 'clean' } });
+    expect(fileNames()).toEqual(['src/clean.ts']);
+    expect(screen.getByRole('region', { name: 'Mutants in src/clean.ts' })).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText('Filter files'), { target: { value: 'nowhere' } });
+    expect(screen.getByText('No file matches “nowhere”')).toBeDefined();
+    expect(screen.queryByRole('region', { name: /^Mutants in / })).toBeNull();
   });
 
   it.each([
-    [95, 'A', 'var(--cq-green)'],
-    [90, 'A', 'var(--cq-green)'],
-    [89.9, 'B', 'var(--cq-blue)'],
-    [75, 'B', 'var(--cq-blue)'],
-    [74.9, 'C', 'var(--cq-amber)'],
-    [60, 'C', 'var(--cq-amber)'],
-    [59.9, 'D', 'var(--cq-red)'],
-    [40, 'D', 'var(--cq-red)'],
-    [39.9, 'E', 'var(--cq-red-deep)'],
-  ])('shows rating %s as %s', async (score, rating, color) => {
+    [95, 'A'],
+    [89.9, 'B'],
+    [74.9, 'C'],
+    [59.9, 'D'],
+    [39.9, 'E'],
+  ])('rates a score of %s as %s', async (score, rating) => {
     vi.mocked(fetchMutationSummary).mockResolvedValueOnce({ ...completeSummary, score });
     render(<MutationTesting projectKey="rating-project" />);
 
-    expect(await screen.findByText(`${rating} rating`)).toBeDefined();
-    expect(document.querySelector('.cq-gauge-card')?.getAttribute('style')).toContain(color);
-    expect(screen.getByText(`${Number(score).toFixed(1)}%`)).toBeDefined();
+    expect((await screen.findByTitle(`Rating ${rating}`)).className).toContain('cq-rating-large');
+    expect(screen.getByText(`${score.toFixed(1)}%`)).toBeDefined();
   });
 
-  it('uses optional file values when an older report omits file metrics and mutants', async () => {
+  it('shows what it can for an older report that omits file metrics and mutants', async () => {
     vi.mocked(fetchMutationReport).mockResolvedValueOnce({
       files: [{ path: 'src/legacy.ts', language: 'typescript' }],
     });
     render(<MutationTesting projectKey="legacy-report-project" />);
 
-    expect(await screen.findByText('Files (1)')).toBeDefined();
-    const row = screen.getByRole('row', { name: /src\/legacy\.ts/ });
-    expect(row.textContent).toContain('N/A%');
-    expect(row.textContent).toContain('0');
-
-    fireEvent.click(screen.getByText('src/legacy.ts'));
-    expect(screen.getByText('Mutants in src/legacy.ts')).toBeDefined();
+    await screen.findByText('Mutation Testing');
+    expect(screen.getByText('stryker').parentElement?.textContent).toBe(
+      'stryker · 6 mutants in 1 file',
+    );
+    expect(within(detail()).getByText('N/A')).toBeDefined();
+    expect(within(detail()).queryByTitle(/^Rating /)).toBeNull();
+    expect(tab(/All/).textContent).toBe('All0');
     expect(screen.getByText('No mutants to display')).toBeDefined();
   });
 
-  it('uses zero padding for a single nonzero mutant status', async () => {
-    vi.mocked(fetchMutationSummary).mockResolvedValueOnce({
-      ...completeSummary,
-      total: 2,
-      killed: 2,
-      survived: 0,
-    });
-    render(<MutationTesting projectKey="single-status-project" />);
-
-    expect(await screen.findByText('Mutation Testing')).toBeDefined();
-    expect(chartCallbacks.pieLabels).toEqual(['Killed: 100.0%']);
-    expect(chartCallbacks.paddingAngle).toBe(0);
-  });
-
-  it('shows the empty state when the mutation summary is absent', async () => {
-    vi.mocked(fetchMutationSummary).mockResolvedValueOnce(null);
-    render(<MutationTesting projectKey="empty-project" />);
-
-    expect(
-      await screen.findByText('No mutation testing data available for this project'),
-    ).toBeDefined();
-  });
-
-  it('handles a report with no files and no mutants without rendering a file table', async () => {
-    vi.mocked(fetchMutationSummary).mockResolvedValueOnce({
+  it('says a report lists no files, whether the download is empty, absent or misshapen', async () => {
+    vi.mocked(fetchMutationSummary).mockResolvedValue({
       ...completeSummary,
       score: 0,
       total: 0,
@@ -192,21 +166,37 @@ describe('MutationTesting', () => {
       survived: 0,
     });
     vi.mocked(fetchMutationReport).mockResolvedValueOnce(null);
-    render(<MutationTesting projectKey="no-files-project" />);
+    const { unmount } = render(<MutationTesting projectKey="no-files-project" />);
 
-    expect(await screen.findByText('Mutation Testing')).toBeDefined();
-    expect(screen.getByText('Files (0)')).toBeDefined();
-    expect(screen.getByText('No mutant data available')).toBeDefined();
+    expect(await screen.findByText('This report lists no files')).toBeDefined();
+    expect(screen.getByRole('img', { name: 'No mutants' })).toBeDefined();
+    unmount();
+
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce({ files: { 'src/app.ts': [] } });
+    render(<MutationTesting projectKey="raw-stryker-project" />);
+    expect(await screen.findByText('This report lists no files')).toBeDefined();
   });
 
-  it('logs a rejected request and exits the loading state', async () => {
+  it('names the branch when it has no mutation report', async () => {
+    vi.mocked(fetchMutationSummary).mockResolvedValueOnce(null);
+    render(<MutationTesting projectKey="empty-project" branch="release" />);
+
+    expect(await screen.findByText('No mutation report for release')).toBeDefined();
+    expect(screen.getByText('scripts/upload-mutation-report.sh')).toBeDefined();
+  });
+
+  it('logs a rejected request, says the report did not load, and loads it on a retry', async () => {
     vi.mocked(fetchMutationSummary).mockRejectedValueOnce(new Error('offline'));
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(<MutationTesting projectKey="offline-project" />);
 
-    expect(
-      await screen.findByText('No mutation testing data available for this project'),
-    ).toBeDefined();
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The mutation report did not load',
+    );
     expect(error).toHaveBeenCalledWith('Failed to load mutation data:', expect.any(Error));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Mutation Testing')).toBeDefined();
+    expect(fetchMutationSummary).toHaveBeenCalledTimes(2);
   });
 });
