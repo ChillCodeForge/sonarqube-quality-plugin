@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality.mutation.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport.MutationMutant;
@@ -100,5 +101,15 @@ class CargoMutantsParserTest {
   @Test
   void readsAnUnknownOutcomeAsUnknown() {
     assertEquals("UNKNOWN", CargoMutantsParser.statusOf("Success"));
+  }
+
+  @Test
+  void needsTheCargoMutantsVersionToRecognizeAnOutcomesFile() {
+    byte[] withoutVersion = "{\"outcomes\": []}".getBytes(StandardCharsets.UTF_8);
+
+    IOException ex =
+        assertThrows(IOException.class, () -> parser.parse(withoutVersion, "outcomes.json"));
+
+    assertEquals("Unknown mutation report format", ex.getMessage());
   }
 }

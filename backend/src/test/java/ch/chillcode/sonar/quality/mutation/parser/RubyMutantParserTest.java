@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality.mutation.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport.MutationMutant;
@@ -112,5 +113,34 @@ class RubyMutantParserTest {
   @Test
   void readsNoAddedLinesFromAnEmptyDiff() {
     assertEquals("", RubyMutantParser.addedLines(""));
+  }
+
+  @Test
+  void skipsTheFileHeadersOfAUnifiedDiff() {
+    assertEquals(
+        "nil", RubyMutantParser.addedLines("--- a/lib/x.rb\n+++ b/lib/x.rb\n-  1\n+  nil"));
+  }
+
+  @Test
+  void placesAMutantOnLineZeroWhenItsSubjectNamesNoLine() throws IOException {
+    String session =
+        SESSION.replace(
+            "\"identification\": \"Shop::Cart#total:lib/shop/cart.rb:12\"",
+            "\"identification\": \"Shop::Cart#total\"");
+
+    NormalizedMutationReport report =
+        parser.parse(session.getBytes(StandardCharsets.UTF_8), "session.json");
+
+    assertEquals(0, report.getMutants().get(0).getLocation().getStart().getLine());
+  }
+
+  @Test
+  void needsTheMutantVersionToRecognizeASession() {
+    byte[] withoutVersion = "{\"subject_results\": []}".getBytes(StandardCharsets.UTF_8);
+
+    IOException ex =
+        assertThrows(IOException.class, () -> parser.parse(withoutVersion, "session.json"));
+
+    assertEquals("Unknown mutation report format", ex.getMessage());
   }
 }
