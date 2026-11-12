@@ -534,4 +534,142 @@ class MutationWebServiceTest {
     assertFalse(service.authorizeMutationWrite(req, res));
     assertEquals(503, res.status());
   }
+
+  @Test
+  void readsAnEmptySecretFileAsNoToken() throws IOException {
+    Path tokenFile = Files.createTempFile("mutation-upload-token", ".txt");
+    try {
+      Files.writeString(tokenFile, "  \n");
+
+      assertNull(MutationWebService.readUploadToken(tokenFile));
+    } finally {
+      Files.deleteIfExists(tokenFile);
+    }
+  }
+
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource(
+      value = {"NULL, main", "'', main", "feature, feature"},
+      nullValues = "NULL")
+  void defaultsAnAbsentOrEmptyBranchToMain(String given, String expected) {
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.param("branch")).thenReturn(given);
+
+    assertEquals(expected, MutationWebService.branchOf(request));
+  }
+
+  @Test
+  void answersNotConfiguredToAnAnonymousWriteWithoutSecret() throws IOException {
+    MutationWebService service =
+        new MutationWebService(
+            new MutationReportParser(), new MutationReportStorageService(), null);
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.empty());
+
+    RecordingResponse response = new RecordingResponse();
+    assertFalse(service.authorizeMutationWrite(request, response));
+
+    assertEquals(503, response.status());
+    assertEquals("Mutation upload is not configured", response.body());
+    // A missing header is never sent to SonarQube for validation.
+    org.mockito.Mockito.verify(request, org.mockito.Mockito.never()).localConnector();
+  }
+
+  private static WebService.Action action(MutationWebService service, String key) {
+    WebService.Context context = new WebService.Context();
+    service.define(context);
+    return context.controller("api/chillcode_mutation").action(key);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"upload", "delete"})
+  void refusesAnUnauthorizedWriteBeforeTouchingStorage(String key) throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer wrong"));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, key).handler().handle(request, response);
+
+    assertEquals(403, response.status());
+    org.mockito.Mockito.verifyNoInteractions(storage);
+    org.mockito.Mockito.verify(request, org.mockito.Mockito.never()).mandatoryParam("projectKey");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"summary", "status"})
+  void hidesAProjectTheCallerMayNotBrowse(String key) throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("private");
+    org.mockito.Mockito.when(request.localConnector()).thenReturn(connectorAnswering(403));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, key).handler().handle(request, response);
+
+    assertEquals(404, response.status());
+    assertEquals("Not Found", response.body());
+    org.mockito.Mockito.verifyNoInteractions(storage);
+  }
+
+  @Test
+  void answersBadRequestToAnUploadThatIsNotAReport() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    org.mockito.Mockito.when(storage.getMaxReportSize()).thenReturn(1024L);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer secret-token"));
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    org.mockito.Mockito.when(request.paramAsInputStream("report"))
+        .thenReturn(new ByteArrayInputStream("not gzip".getBytes()));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, "upload").handler().handle(request, response);
+
+    assertEquals(400, response.status());
+    assertEquals("text/plain", response.mediaType());
+    assertTrue(response.body().startsWith("Bad Request: "));
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.never())
+        .storeReport(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void storesAnUploadUnderTheGivenProjectAndDefaultBranch() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    org.mockito.Mockito.when(storage.getMaxReportSize()).thenReturn(1024L);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer secret-token"));
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    java.io.ByteArrayOutputStream gzipped = new java.io.ByteArrayOutputStream();
+    try (java.util.zip.GZIPOutputStream gos = new java.util.zip.GZIPOutputStream(gzipped)) {
+      gos.write("<mutations></mutations>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    org.mockito.Mockito.when(request.paramAsInputStream("report"))
+        .thenReturn(new ByteArrayInputStream(gzipped.toByteArray()));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, "upload").handler().handle(request, response);
+
+    org.mockito.ArgumentCaptor<NormalizedMutationReport> stored =
+        org.mockito.ArgumentCaptor.forClass(NormalizedMutationReport.class);
+    org.mockito.Mockito.verify(storage).storeReport(stored.capture());
+    assertEquals("proj1", stored.getValue().getProject());
+    assertEquals("main", stored.getValue().getBranch());
+    assertTrue(response.body().contains("\"branch\":\"main\""));
+  }
 }

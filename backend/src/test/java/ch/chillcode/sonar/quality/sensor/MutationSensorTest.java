@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sonar.api.batch.sensor.SensorContext;
+import org.sonar.api.batch.sensor.SensorDescriptor;
 import org.sonar.api.batch.sensor.measure.NewMeasure;
 import org.sonar.api.config.Configuration;
 
@@ -119,5 +120,33 @@ class MutationSensorTest {
 
     assertDoesNotThrow(() -> sensor.execute(context));
     verify(measure, times(1)).save(); // only the report branch, no mutation measures
+  }
+
+  @Test
+  void describesItselfByName() {
+    SensorDescriptor descriptor = mock(SensorDescriptor.class);
+
+    sensor.describe(descriptor);
+
+    verify(descriptor).name("ChillCode Mutation Testing Sensor");
+  }
+
+  @Test
+  void anEmptyReportPathPublishesNoMutationMeasures() {
+    when(config.get("sonar.chillcode.mutationReport")).thenReturn(Optional.of(""));
+
+    sensor.execute(context);
+
+    verify(measure, times(1)).save(); // only the report branch
+  }
+
+  @Test
+  void aMissingLocalReportPublishesNoMutationMeasures() {
+    Path missing = tempDir.resolve("absent.xml");
+    when(config.get("sonar.chillcode.mutationReport")).thenReturn(Optional.of(missing.toString()));
+
+    sensor.execute(context);
+
+    verify(measure, times(1)).save(); // only the report branch
   }
 }

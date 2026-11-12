@@ -224,6 +224,12 @@ public class MutationWebService implements WebService {
         .write(message.getBytes(StandardCharsets.UTF_8));
   }
 
+  /** The optional {@code branch} parameter; absent or empty means {@code main}. */
+  static String branchOf(Request request) {
+    String branch = request.param(PARAM_BRANCH);
+    return branch == null || branch.isEmpty() ? "main" : branch;
+  }
+
   static String readUploadToken(Path tokenFile) {
     try {
       String token = Files.readString(tokenFile, StandardCharsets.UTF_8).trim();
@@ -254,10 +260,7 @@ public class MutationWebService implements WebService {
       return;
     }
     String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
         GZIPInputStream gis = new GZIPInputStream(is)) {
@@ -293,10 +296,7 @@ public class MutationWebService implements WebService {
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
     if (report == null) {
@@ -316,10 +316,7 @@ public class MutationWebService implements WebService {
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
     if (report == null) {
@@ -352,10 +349,7 @@ public class MutationWebService implements WebService {
     if (!authorizeProjectRead(request.localConnector(), response, projectKey)) {
       return;
     }
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
 
@@ -377,10 +371,7 @@ public class MutationWebService implements WebService {
       return;
     }
     String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     storage.deleteReport(projectKey, branch);
 
@@ -395,10 +386,7 @@ public class MutationWebService implements WebService {
 
   private void handleBadge(Request request, Response response) throws Exception {
     String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
-    String branch = request.param(PARAM_BRANCH);
-    if (branch == null || branch.isEmpty()) {
-      branch = "main";
-    }
+    String branch = branchOf(request);
 
     NormalizedMutationReport report = storage.loadReport(projectKey, branch);
     String label = "mutation score";

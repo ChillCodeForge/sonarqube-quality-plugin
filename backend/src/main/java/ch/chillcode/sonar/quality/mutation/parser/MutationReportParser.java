@@ -143,9 +143,14 @@ public class MutationReportParser {
     if (RubyMutantParser.accepts(root)) {
       return RubyMutantParser.parse(root);
     }
-    // Mutmut format detection
+    // Mutmut's native on-disk format is intentionally not parsed: it does not
+    // retain one source location per mutation, so the bundled
+    // scripts/mutmut_to_stryker.py converter maps it to the Stryker shape
+    // instead (see README "Supported report inputs"). Failing loudly keeps an
+    // accidental raw upload from being swallowed as "unknown format".
     if (root.has("mutants")) {
-      return parseMutmut();
+      throw new UnsupportedOperationException(
+          "Raw mutmut reports are not supported; convert them with scripts/mutmut_to_stryker.py");
     }
     // Already normalized format
     if (root.has("tool") && root.has("summary")) {
@@ -483,7 +488,8 @@ public class MutationReportParser {
   }
 
   private String mapPitestStatus(String pitestStatus) {
-    return switch (pitestStatus == null ? "" : pitestStatus.toUpperCase()) {
+    // Element.getAttribute answers "" for a missing attribute, never null.
+    return switch (pitestStatus.toUpperCase()) {
       case STATUS_KILLED -> STATUS_KILLED;
       case STATUS_SURVIVED -> STATUS_SURVIVED;
       case STATUS_NO_COVERAGE -> STATUS_NO_COVERAGE;
@@ -496,44 +502,39 @@ public class MutationReportParser {
   // PIT reports the fully-qualified class and the bare source file name
   // separately (no path); reconstructing a path from the class package
   // lets the UI's per-file table group mutants the same way it does for
-  // Stryker's path-keyed files map.
+  // Stryker's path-keyed files map. Both arguments come from textOf, so they
+  // are never null; a class without a package (or no class at all) keeps the
+  // bare source file name.
   private String classAndSourceFileToPath(String mutatedClass, String sourceFile) {
-    if (mutatedClass == null || mutatedClass.isEmpty()) {
-      return sourceFile == null ? UNKNOWN : sourceFile;
-    }
     int lastDot = mutatedClass.lastIndexOf('.');
     if (lastDot < 0) {
-      return sourceFile == null ? mutatedClass : sourceFile;
+      return sourceFile;
     }
     String packagePath = mutatedClass.substring(0, lastDot).replace('.', '/');
     String fileName =
-        (sourceFile == null || sourceFile.isEmpty())
-            ? mutatedClass.substring(lastDot + 1) + ".java"
-            : sourceFile;
+        sourceFile.isEmpty() ? mutatedClass.substring(lastDot + 1) + ".java" : sourceFile;
     return packagePath + "/" + fileName;
   }
 
   private String shortMutatorName(String fqMutatorName) {
-    if (fqMutatorName == null) {
-      return "";
-    }
     int lastDot = fqMutatorName.lastIndexOf('.');
     return lastDot < 0 ? fqMutatorName : fqMutatorName.substring(lastDot + 1);
   }
 
+  /** The text of the first {@code tagName} child, "" when there is none; never null. */
   private String textOf(Element parent, String tagName) {
     NodeList nodes = parent.getElementsByTagName(tagName);
     if (nodes.getLength() == 0) {
       return "";
     }
-    String text = nodes.item(0).getTextContent();
-    return text == null ? "" : text;
+    // An element's text content is never null (only documents and doctypes have none).
+    return nodes.item(0).getTextContent();
   }
 
   private int parseIntOrZero(String value) {
     try {
       return Integer.parseInt(value.trim());
-    } catch (NumberFormatException | NullPointerException e) {
+    } catch (NumberFormatException e) {
       return 0;
     }
   }
@@ -552,15 +553,5 @@ public class MutationReportParser {
     } catch (Exception e) {
       throw new IOException("Failed to parse XML mutation report", e);
     }
-  }
-
-  // Mutmut's native on-disk format is intentionally not parsed: it does not
-  // retain one source location per mutation, so the bundled
-  // scripts/mutmut_to_stryker.py converter maps it to the Stryker shape
-  // instead (see README "Supported report inputs"). Failing loudly keeps an
-  // accidental raw upload from being swallowed as "unknown format".
-  private NormalizedMutationReport parseMutmut() {
-    throw new UnsupportedOperationException(
-        "Raw mutmut reports are not supported; convert them with scripts/mutmut_to_stryker.py");
   }
 }

@@ -2,14 +2,23 @@ package ch.chillcode.sonar.quality.mutation.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MutationReportParserTest {
 
@@ -326,5 +335,191 @@ class MutationReportParserTest {
     assertEquals("stryker", report.getTool());
     assertEquals("python", report.getLanguage());
     assertEquals(0.0, report.getSummary().getScore(), 0.001);
+  }
+
+  // --- Entry points and format detection edge cases ---
+
+  @Test
+  void wrapsAFailureThatIsNotAnIoExceptionIntoOne() {
+    byte[] mutmut = "{\"mutants\": []}".getBytes(StandardCharsets.UTF_8);
+
+    IOException ex = assertThrows(IOException.class, () -> parser.parse(mutmut, "mutmut.json"));
+
+    assertEquals("Failed to parse mutation report", ex.getMessage());
+    assertInstanceOf(UnsupportedOperationException.class, ex.getCause());
+  }
+
+  @Test
+  void treatsAnXmlFileNameAsXmlEvenWhenTheBodyIsNot() {
+    byte[] empty = new byte[0];
+
+    IOException ex = assertThrows(IOException.class, () -> parser.parse(empty, "mutations.xml"));
+
+    assertEquals("Failed to parse XML mutation report", ex.getMessage());
+  }
+
+  @Test
+  void sniffsJsonWithoutAFileName() throws IOException {
+    byte[] json = "{\"schemaVersion\":1,\"files\":{}}".getBytes(StandardCharsets.UTF_8);
+
+    assertEquals("stryker", parser.parse(json, null).getTool());
+  }
+
+  @Test
+  void parsesAReportFromAStream() throws IOException {
+    InputStream input =
+        new ByteArrayInputStream(
+            "{\"schemaVersion\":1,\"files\":{}}".getBytes(StandardCharsets.UTF_8));
+
+    assertEquals("stryker", parser.parseFromStream(input).getTool());
+  }
+
+  @Test
+  void rejectsAnUnreadableStream() {
+    InputStream input = new ByteArrayInputStream("not json".getBytes(StandardCharsets.UTF_8));
+
+    IOException ex = assertThrows(IOException.class, () -> parser.parseFromStream(input));
+
+    assertEquals("Failed to parse mutation report from stream", ex.getMessage());
+  }
+
+  @Test
+  void readsAnAlreadyNormalizedReport() throws IOException {
+    String json =
+        """
+        {"schemaVersion": 1, "tool": "pitest", "language": "java", "project": "p",
+         "summary": {"total": 4, "killed": 3, "score": 75.0}}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals("pitest", report.getTool());
+    assertEquals("p", report.getProject());
+    assertEquals(4, report.getSummary().getTotal());
+    assertEquals(75.0, report.getSummary().getScore(), 0.001);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "{\"tool\": \"pitest\"}", "{\"summary\": {}}"})
+  void rejectsJsonOfNoKnownFormat(String json) {
+    IOException ex = assertThrows(IOException.class, () -> parser.parse(json));
+
+    assertEquals("Unknown mutation report format", ex.getCause().getMessage());
+  }
+
+  // --- Stryker edge cases ---
+
+  @Test
+  void strykerFilesThatAreNotAnObjectYieldAnEmptyReport() throws IOException {
+    NormalizedMutationReport report = parser.parse("{\"schemaVersion\":1,\"files\":[]}");
+
+    assertTrue(report.getFiles().isEmpty());
+    assertEquals(0, report.getSummary().getTotal());
+  }
+
+  @Test
+  void strykerFileWithoutMutantsArrayHasZeroScore() throws IOException {
+    NormalizedMutationReport report = parser.parse("{\"schemaVersion\":1,\"files\":{\"a.ts\":{}}}");
+
+    NormalizedMutationReport.MutationFile file = report.getFiles().get(0);
+    assertTrue(file.getMutants().isEmpty());
+    assertEquals(0.0, ((Number) file.getMetrics().get("score")).doubleValue(), 0.001);
+    assertEquals(0, file.getMetrics().get("total"));
+  }
+
+  @Test
+  void strykerUnknownStatusCountsOnlyTowardsTheTotal() throws IOException {
+    String json =
+        """
+        {"schemaVersion": 1, "files": {"a.ts": {"mutants": [
+          {"id": "1", "mutatorName": "M", "replacement": "", "status": "Pending"}
+        ]}}}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    NormalizedMutationReport.MutationMutant mutant = report.getMutants().get(0);
+    assertEquals("UNKNOWN", mutant.getStatus());
+    assertNull(mutant.getLocation());
+    assertEquals(1, report.getSummary().getTotal());
+    assertEquals(0, report.getSummary().getIgnored());
+    assertEquals(0.0, report.getSummary().getScore(), 0.001);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "src/view.tsx, typescript",
+    "src/view.jsx, javascript",
+    "src/Main.java, java",
+    "lib/tool.rb, unknown"
+  })
+  void strykerDerivesEachFileLanguageFromItsExtension(String path, String language)
+      throws IOException {
+    String json = "{\"schemaVersion\":1,\"files\":{\"" + path + "\":{\"mutants\":[]}}}";
+
+    assertEquals(language, parser.parse(json).getFiles().get(0).getLanguage());
+  }
+
+  @Test
+  void strykerDetectsPythonFromAPyProjectName() throws IOException {
+    NormalizedMutationReport report =
+        parser.parse("{\"schemaVersion\":1,\"projectName\":\"pyapp\",\"files\":{}}");
+
+    assertEquals("python", report.getLanguage());
+  }
+
+  // --- Pitest edge cases ---
+
+  @Test
+  void pitestUnknownOrMissingStatusIsIgnoredNotSurvived() throws IOException {
+    String xml =
+        """
+        <mutations>
+            <mutation status="MEMORY_ERROR"><sourceFile>A.java</sourceFile>
+                <mutatedClass>a.A</mutatedClass><lineNumber>1</lineNumber>
+                <mutator>X</mutator></mutation>
+            <mutation><sourceFile>A.java</sourceFile>
+                <mutatedClass>a.A</mutatedClass><lineNumber>2</lineNumber>
+                <mutator>X</mutator></mutation>
+        </mutations>
+        """;
+
+    NormalizedMutationReport report = parser.parse(xml.getBytes(StandardCharsets.UTF_8), "x");
+
+    assertEquals("UNKNOWN", report.getMutants().get(0).getStatus());
+    assertEquals("UNKNOWN", report.getMutants().get(1).getStatus());
+    assertEquals(2, report.getSummary().getIgnored());
+    assertEquals(0, report.getSummary().getSurvived());
+    assertEquals(2, report.getFiles().get(0).getMetrics().get("ignored"));
+  }
+
+  @Test
+  void pitestMapsSparseMutationElementsToSafeDefaults() throws IOException {
+    String xml =
+        """
+        <mutations>
+            <mutation status="SURVIVED"><sourceFile>Top.java</sourceFile>
+                <mutatedClass>Top</mutatedClass><lineNumber>x</lineNumber>
+                <mutator>ShortMutator</mutator></mutation>
+            <mutation status="KILLED"><sourceFile>Orphan.java</sourceFile>
+                <killingTest>a.OrphanTest.t</killingTest></mutation>
+            <mutation status="KILLED"><mutatedClass>a.b.Gen</mutatedClass></mutation>
+        </mutations>
+        """;
+
+    NormalizedMutationReport report = parser.parse(xml.getBytes(StandardCharsets.UTF_8), "x");
+
+    NormalizedMutationReport.MutationMutant top = report.getMutants().get(0);
+    assertEquals("Top.java", top.getFilePath());
+    assertEquals("ShortMutator", top.getMutatorName());
+    assertEquals(0, top.getLocation().getStart().getLine());
+    assertTrue(top.getCoveredBy().isEmpty());
+
+    NormalizedMutationReport.MutationMutant orphan = report.getMutants().get(1);
+    assertEquals("Orphan.java", orphan.getFilePath());
+    assertEquals("", orphan.getMutatorName());
+    assertEquals(List.of("a.OrphanTest.t"), orphan.getCoveredBy());
+
+    assertEquals("a/b/Gen.java", report.getMutants().get(2).getFilePath());
   }
 }
