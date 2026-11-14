@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.List;
 import java.util.zip.GZIPInputStream;
 import org.sonar.api.server.ws.LocalConnector;
 import org.sonar.api.server.ws.Request;
@@ -265,22 +264,9 @@ public class MutationWebService implements WebService {
     String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
     String branch = branchOf(request);
 
-    try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
-        GZIPInputStream gis = new GZIPInputStream(is)) {
-
-      byte[] content = readLimited(gis, storage.getMaxReportSize());
-      NormalizedMutationReport report;
-      try {
-        report = parser.parse(content, PARAM_REPORT);
-      } catch (MutationReportRejectedException e) {
-        reject(response, projectKey, branch, e.getMessage());
-        return;
-      }
-      List<String> problems = MutationReportGuard.problems(report);
-      if (!problems.isEmpty()) {
-        reject(response, projectKey, branch, String.join("; ", problems));
-        return;
-      }
+    try {
+      NormalizedMutationReport report = parser.parse(readReport(request), PARAM_REPORT);
+      MutationReportGuard.check(report);
       // The report body (raw Stryker JSON / PITest XML) has no
       // reliable project identifier of its own - the projectKey/
       // branch the caller passed as query params are the source of
@@ -300,8 +286,18 @@ public class MutationWebService implements WebService {
             .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
             .endObject();
       }
+    } catch (MutationReportRejectedException e) {
+      reject(response, projectKey, branch, e.getMessage());
     } catch (IOException e) {
       writeText(response, 400, "Bad Request: " + e.getMessage());
+    }
+  }
+
+  /** The uploaded report, decompressed and within the configured size limit. */
+  private byte[] readReport(Request request) throws IOException {
+    try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
+        GZIPInputStream gis = new GZIPInputStream(is)) {
+      return readLimited(gis, storage.getMaxReportSize());
     }
   }
 

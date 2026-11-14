@@ -55,6 +55,14 @@ public final class MutationReportGuard {
 
   private MutationReportGuard() {}
 
+  /** Rejects {@code report} with every {@link #problems} reason, unless there are none. */
+  public static void check(NormalizedMutationReport report) throws MutationReportRejectedException {
+    List<String> problems = problems(report);
+    if (!problems.isEmpty()) {
+      throw new MutationReportRejectedException(String.join("; ", problems));
+    }
+  }
+
   /** Every reason to reject {@code report}, in a sentence each; empty when it may be stored. */
   public static List<String> problems(NormalizedMutationReport report) {
     List<MutationMutant> mutants = report.getMutants();
