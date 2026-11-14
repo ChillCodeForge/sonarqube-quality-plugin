@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import javax.xml.parsers.DocumentBuilder;
@@ -169,23 +170,7 @@ public class MutationReportParser {
    */
   private NormalizedMutationReport rebuildNormalized(NormalizedMutationReport upload)
       throws MutationReportRejectedException {
-    List<NormalizedMutationReport.MutationMutant> mutants = new ArrayList<>();
-    if (upload.getMutants() != null) {
-      mutants.addAll(upload.getMutants());
-    }
-    if (mutants.isEmpty() && upload.getFiles() != null) {
-      for (NormalizedMutationReport.MutationFile file : upload.getFiles()) {
-        if (file.getMutants() == null) {
-          continue;
-        }
-        for (NormalizedMutationReport.MutationMutant mutant : file.getMutants()) {
-          if (mutant.getFilePath() == null) {
-            mutant.setFilePath(file.getPath());
-          }
-          mutants.add(mutant);
-        }
-      }
-    }
+    List<NormalizedMutationReport.MutationMutant> mutants = mutantsOf(upload);
     if (mutants.isEmpty()) {
       throw new MutationReportRejectedException(
           "the report lists no mutants: an upload in the normalized format must carry them,"
@@ -194,19 +179,34 @@ public class MutationReportParser {
     NormalizedMutationReport report =
         ReportAssembler.assemble(upload.getTool(), upload.getLanguage(), mutants);
     report.setSchemaVersion(upload.getSchemaVersion());
-    if (upload.getProject() != null) {
-      report.setProject(upload.getProject());
-    }
-    if (upload.getBranch() != null) {
-      report.setBranch(upload.getBranch());
-    }
-    if (upload.getCommit() != null) {
-      report.setCommit(upload.getCommit());
-    }
-    if (upload.getTimestamp() != null) {
-      report.setTimestamp(upload.getTimestamp());
-    }
+    report.setProject(Objects.requireNonNullElse(upload.getProject(), report.getProject()));
+    report.setBranch(Objects.requireNonNullElse(upload.getBranch(), report.getBranch()));
+    report.setCommit(Objects.requireNonNullElse(upload.getCommit(), report.getCommit()));
+    report.setTimestamp(Objects.requireNonNullElse(upload.getTimestamp(), report.getTimestamp()));
     return report;
+  }
+
+  private static List<NormalizedMutationReport.MutationMutant> mutantsOf(
+      NormalizedMutationReport upload) {
+    if (upload.getMutants() != null && !upload.getMutants().isEmpty()) {
+      return upload.getMutants();
+    }
+    List<NormalizedMutationReport.MutationMutant> mutants = new ArrayList<>();
+    if (upload.getFiles() == null) {
+      return mutants;
+    }
+    for (NormalizedMutationReport.MutationFile file : upload.getFiles()) {
+      if (file.getMutants() == null) {
+        continue;
+      }
+      for (NormalizedMutationReport.MutationMutant mutant : file.getMutants()) {
+        if (mutant.getFilePath() == null) {
+          mutant.setFilePath(file.getPath());
+        }
+        mutants.add(mutant);
+      }
+    }
+    return mutants;
   }
 
   private NormalizedMutationReport parseStryker(JsonNode root) throws IOException {

@@ -294,10 +294,12 @@ public class MutationWebService implements WebService {
             .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
             .endObject();
       }
-    } catch (MutationReportRejectedException e) {
-      reject(response, projectKey, branch, e.getMessage());
     } catch (IOException e) {
-      writeText(response, 400, "Bad Request: " + e.getMessage());
+      if (e instanceof MutationReportRejectedException) {
+        reject(response, projectKey, branch, e.getMessage());
+      } else {
+        writeText(response, 400, "Bad Request: " + e.getMessage());
+      }
     }
   }
 

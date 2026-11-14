@@ -39,6 +39,8 @@ public final class MutationReportGuard {
 
   static final int MAX_UNSETTLED_PERCENT = 10;
 
+  private static final String RUNTIME_ERROR = "RUNTIME_ERROR";
+
   /** The normalized statuses, as documented in the README. */
   static final Set<String> STATUSES =
       Set.of(
@@ -48,10 +50,8 @@ public final class MutationReportGuard {
           "TIMEOUT",
           "IGNORED",
           "COMPILE_ERROR",
-          "RUNTIME_ERROR",
+          RUNTIME_ERROR,
           "ERROR");
-
-  private static final String RUNTIME_ERROR = "RUNTIME_ERROR";
 
   private MutationReportGuard() {}
 
