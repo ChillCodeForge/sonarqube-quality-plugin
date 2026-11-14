@@ -672,4 +672,39 @@ class MutationWebServiceTest {
     assertEquals("main", stored.getValue().getBranch());
     assertTrue(response.body().contains("\"branch\":\"main\""));
   }
+
+  @Test
+  void rejectsAMassTimeoutReportWithAnExplanationAndStoresNothing() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    org.mockito.Mockito.when(storage.getMaxReportSize()).thenReturn(10L * 1024 * 1024);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer secret-token"));
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey"))
+        .thenReturn("development-standards");
+    byte[] report =
+        ch.chillcode.sonar.quality.mutation.StoredReports.stryker("development-standards");
+    java.io.ByteArrayOutputStream gzipped = new java.io.ByteArrayOutputStream();
+    try (java.util.zip.GZIPOutputStream gos = new java.util.zip.GZIPOutputStream(gzipped)) {
+      gos.write(report);
+    }
+    org.mockito.Mockito.when(request.paramAsInputStream("report"))
+        .thenReturn(new ByteArrayInputStream(gzipped.toByteArray()));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, "upload").handler().handle(request, response);
+
+    assertEquals(422, response.status());
+    assertEquals("text/plain", response.mediaType());
+    assertEquals(
+        "Rejected mutation report for development-standards (main), nothing was stored:"
+            + " 6733 of 7606 scored mutants timed out (88.5 %, limit 10 %): a share this high"
+            + " means the test runner overran its timeouts, not that the mutants loop",
+        response.body());
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.never())
+        .storeReport(org.mockito.ArgumentMatchers.any());
+  }
 }

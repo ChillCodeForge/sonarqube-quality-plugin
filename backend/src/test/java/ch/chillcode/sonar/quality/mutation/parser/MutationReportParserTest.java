@@ -324,7 +324,9 @@ class MutationReportParserTest {
     assertEquals(1, calcFile.getMetrics().get("noCoverage"));
     assertEquals(1, calcFile.getMetrics().get("timeout"));
     assertEquals(3, calcFile.getMetrics().get("ignored"));
-    assertEquals("ERROR", calcFile.getMutants().get(6).getStatus());
+    // Stryker's two error kinds stay apart: the upload guard rejects RuntimeErrors only.
+    assertEquals("COMPILE_ERROR", calcFile.getMutants().get(5).getStatus());
+    assertEquals("RUNTIME_ERROR", calcFile.getMutants().get(6).getStatus());
 
     NormalizedMutationReport.MutationMutant m1 = calcFile.getMutants().get(0);
     assertEquals("1", m1.getId());

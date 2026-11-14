@@ -36,6 +36,8 @@ public class MutationReportParser {
   private static final String STATUS_TIMEOUT = "TIMEOUT";
   private static final String STATUS_IGNORED = "IGNORED";
   private static final String STATUS_ERROR = "ERROR";
+  private static final String STATUS_COMPILE_ERROR = "COMPILE_ERROR";
+  private static final String STATUS_RUNTIME_ERROR = "RUNTIME_ERROR";
   private static final String STATUS_UNKNOWN = "UNKNOWN";
 
   // PIT statuses other than KILLED and TIMED_OUT that PIT's own mutation score
@@ -247,7 +249,11 @@ public class MutationReportParser {
       case "nocoverage", "no_coverage" -> STATUS_NO_COVERAGE;
       case "timeout" -> STATUS_TIMEOUT;
       case "ignored" -> STATUS_IGNORED;
-      case "error", "compileerror", "runtimeerror" -> STATUS_ERROR;
+      // Kept apart: a CompileError is an expected verdict, a RuntimeError means the test runner
+      // crashed, which the upload guard rejects. Both stay outside the score.
+      case "compileerror" -> STATUS_COMPILE_ERROR;
+      case "runtimeerror" -> STATUS_RUNTIME_ERROR;
+      case "error" -> STATUS_ERROR;
       default -> STATUS_UNKNOWN;
     };
   }

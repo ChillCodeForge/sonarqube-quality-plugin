@@ -81,6 +81,8 @@ Use the target SonarQube server's configured authentication policy and keep cred
 
 A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures: the server's Compute Engine reads the report while processing the analysis. Each branch analysis publishes the report uploaded for that branch (`sonar.branch.name`, `main` when unset); a branch without an upload gets no mutation measures. Pull request analyses get none, because uploads are per branch.
 
+The upload refuses, with HTTP 422 and every reason in the plain-text body, a report whose numbers describe the test runner rather than the tests, and keeps the stored report: more than 10 % of the scored mutants (killed, timed out, survived, no coverage) timed out (the reports stored on 2026-11-14 stay below 4 %; a mass-timeout nightly reached 88.5 %), a mutant ended in Stryker's `RuntimeError` (the runner crashed), or a mutant has no final status (Stryker `Pending`, PIT `NOT_STARTED`/`STARTED`, any unknown status). CompileErrors and other ignored outcomes stay allowed. `curl --fail` and `scripts/upload-mutation-report.sh` exit non-zero on it, so the CI step fails visibly.
+
 When the scanner runs in the same job that produced the report, `sonar.chillcode.mutationReport` can instead point the scanner-side sensor at the local report file. For that analysis the local report takes precedence over a stored one.
 
 ### Stryker

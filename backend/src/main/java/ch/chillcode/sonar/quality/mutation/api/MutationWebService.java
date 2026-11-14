@@ -1,6 +1,7 @@
 package ch.chillcode.sonar.quality.mutation.api;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportGuard;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.ByteArrayOutputStream;
@@ -11,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.zip.GZIPInputStream;
 import org.sonar.api.server.ws.LocalConnector;
 import org.sonar.api.server.ws.Request;
@@ -267,6 +269,21 @@ public class MutationWebService implements WebService {
 
       byte[] content = readLimited(gis, storage.getMaxReportSize());
       NormalizedMutationReport report = parser.parse(content, PARAM_REPORT);
+      List<String> problems = MutationReportGuard.problems(report);
+      if (!problems.isEmpty()) {
+        // 422 with every reason, so the CI upload step fails and its log says why; the stored
+        // report stays the last trustworthy one.
+        writeText(
+            response,
+            422,
+            "Rejected mutation report for "
+                + projectKey
+                + " ("
+                + branch
+                + "), nothing was stored: "
+                + String.join("; ", problems));
+        return;
+      }
       // The report body (raw Stryker JSON / PITest XML) has no
       // reliable project identifier of its own - the projectKey/
       // branch the caller passed as query params are the source of
