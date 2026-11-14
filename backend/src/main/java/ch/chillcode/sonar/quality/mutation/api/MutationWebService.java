@@ -269,7 +269,13 @@ public class MutationWebService implements WebService {
         GZIPInputStream gis = new GZIPInputStream(is)) {
 
       byte[] content = readLimited(gis, storage.getMaxReportSize());
-      NormalizedMutationReport report = parser.parse(content, PARAM_REPORT);
+      NormalizedMutationReport report;
+      try {
+        report = parser.parse(content, PARAM_REPORT);
+      } catch (MutationReportRejectedException e) {
+        reject(response, projectKey, branch, e.getMessage());
+        return;
+      }
       List<String> problems = MutationReportGuard.problems(report);
       if (!problems.isEmpty()) {
         reject(response, projectKey, branch, String.join("; ", problems));
@@ -295,11 +301,7 @@ public class MutationWebService implements WebService {
             .endObject();
       }
     } catch (IOException e) {
-      if (e instanceof MutationReportRejectedException) {
-        reject(response, projectKey, branch, e.getMessage());
-      } else {
-        writeText(response, 400, "Bad Request: " + e.getMessage());
-      }
+      writeText(response, 400, "Bad Request: " + e.getMessage());
     }
   }
 
