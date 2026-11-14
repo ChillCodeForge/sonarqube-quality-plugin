@@ -16,9 +16,11 @@ import java.util.Map;
  * Builds a normalized report from a flat list of mutants whose statuses are already normalized: the
  * summary, the per-file breakdown the UI's file table reads, and the score.
  *
- * <p>Any status other than KILLED, SURVIVED, NO_COVERAGE and TIMEOUT counts as ignored and leaves
- * the score's denominator, which is how PIT treats a mutant that did not compile. The score is
- * killed over the rest, in percent, and 0 when nothing is left.
+ * <p>The score follows Stryker's mutation score (mutation-testing-elements): detected mutants
+ * (KILLED and TIMEOUT) over valid ones (detected, SURVIVED and NO_COVERAGE), in percent, and 0 when
+ * nothing is valid. Any other status (ignored, compile or runtime error, non-viable, unknown)
+ * counts as ignored and leaves both sides of the ratio. This is the only place a score is computed;
+ * parsers translate their tool's statuses so that this ratio equals the tool's own score.
  */
 final class ReportAssembler {
 
@@ -46,10 +48,18 @@ final class ReportAssembler {
       file.setPath(entry.getKey());
       file.setLanguage(language);
       file.setMutants(entry.getValue());
-      file.setMetrics(countsOf(entry.getValue()).asMetrics());
+      file.setMetrics(metricsOf(entry.getValue()));
       files.add(file);
     }
 
+    report.setSummary(summaryOf(mutants));
+    report.setFiles(files);
+    report.setMutants(mutants);
+    return report;
+  }
+
+  /** The counts and score of {@code mutants}, as a report summary. */
+  static MutationSummary summaryOf(List<MutationMutant> mutants) {
     Counts counts = countsOf(mutants);
     MutationSummary summary = new MutationSummary();
     summary.setTotal(counts.total);
@@ -59,11 +69,12 @@ final class ReportAssembler {
     summary.setTimeout(counts.timeout);
     summary.setIgnored(counts.ignored);
     summary.setScore(counts.score());
+    return summary;
+  }
 
-    report.setSummary(summary);
-    report.setFiles(files);
-    report.setMutants(mutants);
-    return report;
+  /** The counts and score of one file's {@code mutants}, as the UI's file-table metrics. */
+  static Map<String, Object> metricsOf(List<MutationMutant> mutants) {
+    return countsOf(mutants).asMetrics();
   }
 
   private static Counts countsOf(List<MutationMutant> mutants) {
@@ -90,8 +101,9 @@ final class ReportAssembler {
     int ignored;
 
     double score() {
-      int relevant = total - ignored;
-      return relevant > 0 ? (double) killed / relevant * 100 : 0.0;
+      int detected = killed + timeout;
+      int valid = detected + survived + noCoverage;
+      return valid > 0 ? (double) detected / valid * 100 : 0.0;
     }
 
     Map<String, Object> asMetrics() {

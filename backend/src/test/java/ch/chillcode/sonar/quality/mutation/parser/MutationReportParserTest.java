@@ -108,20 +108,29 @@ class MutationReportParserTest {
     assertEquals("pitest", report.getTool());
     assertEquals("java", report.getLanguage());
     assertEquals(5, report.getSummary().getTotal());
-    assertEquals(1, report.getSummary().getKilled());
+    // PIT counts a NON_VIABLE mutant as detected (DetectionStatus.isDetected),
+    // so it is reported as killed with PIT's own status as the reason.
+    assertEquals(2, report.getSummary().getKilled());
     assertEquals(1, report.getSummary().getSurvived());
     assertEquals(1, report.getSummary().getNoCoverage());
     assertEquals(1, report.getSummary().getTimeout());
-    // NON_VIABLE (compile-error mutants) must not silently disappear;
-    // treated as ignored so they neither count as killed nor survived.
-    assertEquals(1, report.getSummary().getIgnored());
+    assertEquals(0, report.getSummary().getIgnored());
+    assertEquals("NON_VIABLE", report.getMutants().get(4).getStatusReason());
 
-    // Score excludes ignored (NON_VIABLE) mutants from the denominator,
-    // matching PIT's own "test strength" semantics: 1 killed out of
-    // (5 - 1 ignored) = 4 relevant mutants = 25%.
-    assertEquals(25.0, report.getSummary().getScore(), 0.001);
+    // PIT's own mutation score: detected (KILLED, TIMED_OUT, NON_VIABLE)
+    // over all generated mutations = 3 / 5, what PIT prints as
+    // ">> Generated 5 mutations Killed 3 (60%)".
+    assertEquals(60.0, report.getSummary().getScore(), 0.001);
 
     assertEquals(2, report.getFiles().size());
+    NormalizedMutationReport.MutationFile helper =
+        report.getFiles().stream()
+            .filter(f -> f.getPath().equals("de/doccomplete/Helper.java"))
+            .findFirst()
+            .orElseThrow();
+    // NO_COVERAGE, TIMED_OUT, NON_VIABLE: 2 of 3 detected.
+    assertEquals(200.0 / 3, ((Number) helper.getMetrics().get("score")).doubleValue(), 0.001);
+    assertEquals(1, helper.getMetrics().get("timeout"));
   }
 
   @Test
@@ -159,7 +168,7 @@ class MutationReportParserTest {
   }
 
   @Test
-  void allNonViableMutationsYieldZeroScoreNotDivisionByZero() throws IOException {
+  void allNonViableMutationsAreDetectedAsPitReportsThem() throws IOException {
     String xml =
         """
                 <mutations>
@@ -178,9 +187,9 @@ class MutationReportParserTest {
     NormalizedMutationReport report = parser.parse(xml.getBytes(), "pitest.xml");
 
     assertEquals(1, report.getSummary().getTotal());
-    assertEquals(1, report.getSummary().getIgnored());
-    assertEquals(0.0, report.getSummary().getScore(), 0.001);
-    assertFalse(Double.isNaN(report.getSummary().getScore()));
+    assertEquals(1, report.getSummary().getKilled());
+    assertEquals(0, report.getSummary().getIgnored());
+    assertEquals(100.0, report.getSummary().getScore(), 0.001);
   }
 
   // --- Format detection ---
@@ -264,6 +273,12 @@ class MutationReportParserTest {
                   "mutatorName": "CompileError",
                   "replacement": "",
                   "status": "CompileError"
+                },
+                {
+                  "id": "7",
+                  "mutatorName": "RuntimeError",
+                  "replacement": "",
+                  "status": "RuntimeError"
                 }
               ]
             },
@@ -283,14 +298,16 @@ class MutationReportParserTest {
     assertEquals("feature/test", report.getBranch());
     assertEquals("typescript", report.getLanguage());
 
-    assertEquals(6, report.getSummary().getTotal());
+    assertEquals(7, report.getSummary().getTotal());
     assertEquals(1, report.getSummary().getKilled());
     assertEquals(1, report.getSummary().getSurvived());
     assertEquals(1, report.getSummary().getNoCoverage());
     assertEquals(1, report.getSummary().getTimeout());
-    assertEquals(1, report.getSummary().getIgnored());
-    // Score: 1 killed / (6 total - 1 ignored) = 20.0%
-    assertEquals(20.0, report.getSummary().getScore(), 0.001);
+    // Ignored, CompileError and RuntimeError are all outside the score.
+    assertEquals(3, report.getSummary().getIgnored());
+    // Stryker's mutation score: detected (killed 1 + timeout 1) over valid
+    // (detected 2 + survived 1 + no coverage 1) = 50%.
+    assertEquals(50.0, report.getSummary().getScore(), 0.001);
 
     assertEquals(3, report.getFiles().size());
     NormalizedMutationReport.MutationFile calcFile =
@@ -299,14 +316,15 @@ class MutationReportParserTest {
             .findFirst()
             .orElseThrow();
     assertEquals("typescript", calcFile.getLanguage());
-    assertEquals(6, calcFile.getMutants().size());
-    assertEquals(25.0, ((Number) calcFile.getMetrics().get("score")).doubleValue(), 0.001);
-    assertEquals(6, calcFile.getMetrics().get("total"));
+    assertEquals(7, calcFile.getMutants().size());
+    assertEquals(50.0, ((Number) calcFile.getMetrics().get("score")).doubleValue(), 0.001);
+    assertEquals(7, calcFile.getMetrics().get("total"));
     assertEquals(1, calcFile.getMetrics().get("killed"));
     assertEquals(1, calcFile.getMetrics().get("survived"));
     assertEquals(1, calcFile.getMetrics().get("noCoverage"));
     assertEquals(1, calcFile.getMetrics().get("timeout"));
-    assertEquals(1, calcFile.getMetrics().get("ignored"));
+    assertEquals(3, calcFile.getMetrics().get("ignored"));
+    assertEquals("ERROR", calcFile.getMutants().get(6).getStatus());
 
     NormalizedMutationReport.MutationMutant m1 = calcFile.getMutants().get(0);
     assertEquals("1", m1.getId());
@@ -428,7 +446,7 @@ class MutationReportParserTest {
   }
 
   @Test
-  void strykerUnknownStatusCountsOnlyTowardsTheTotal() throws IOException {
+  void strykerUnknownStatusIsLeftOutOfTheScore() throws IOException {
     String json =
         """
         {"schemaVersion": 1, "files": {"a.ts": {"mutants": [
@@ -442,8 +460,30 @@ class MutationReportParserTest {
     assertEquals("UNKNOWN", mutant.getStatus());
     assertNull(mutant.getLocation());
     assertEquals(1, report.getSummary().getTotal());
-    assertEquals(0, report.getSummary().getIgnored());
+    assertEquals(1, report.getSummary().getIgnored());
     assertEquals(0.0, report.getSummary().getScore(), 0.001);
+  }
+
+  @Test
+  void strykerCountsTimeoutsAsDetected() throws IOException {
+    // Shape of a report dominated by timeouts (development-standards:
+    // 257 killed, 6733 timeout, 616 survived): timeouts must raise the
+    // score, not sink it.
+    String json =
+        """
+        {"schemaVersion": 1, "files": {"a.ts": {"mutants": [
+          {"id": "1", "status": "Killed"},
+          {"id": "2", "status": "Timeout"},
+          {"id": "3", "status": "Timeout"},
+          {"id": "4", "status": "Survived"}
+        ]}}}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals(75.0, report.getSummary().getScore(), 0.001);
+    assertEquals(
+        75.0, ((Number) report.getFiles().get(0).getMetrics().get("score")).doubleValue(), 0.001);
   }
 
   @ParameterizedTest
@@ -471,11 +511,11 @@ class MutationReportParserTest {
   // --- Pitest edge cases ---
 
   @Test
-  void pitestUnknownOrMissingStatusIsIgnoredNotSurvived() throws IOException {
+  void pitestMissingStatusIsIgnoredNotSurvived() throws IOException {
     String xml =
         """
         <mutations>
-            <mutation status="MEMORY_ERROR"><sourceFile>A.java</sourceFile>
+            <mutation status="NOT_STARTED"><sourceFile>A.java</sourceFile>
                 <mutatedClass>a.A</mutatedClass><lineNumber>1</lineNumber>
                 <mutator>X</mutator></mutation>
             <mutation><sourceFile>A.java</sourceFile>
@@ -491,6 +531,24 @@ class MutationReportParserTest {
     assertEquals(2, report.getSummary().getIgnored());
     assertEquals(0, report.getSummary().getSurvived());
     assertEquals(2, report.getFiles().get(0).getMetrics().get("ignored"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"MEMORY_ERROR", "RUN_ERROR", "NON_VIABLE"})
+  void pitestCountsItsDetectedErrorStatusesAsKilled(String status) throws IOException {
+    String xml =
+        "<mutations><mutation status=\""
+            + status
+            + "\"><sourceFile>A.java</sourceFile><mutatedClass>a.A</mutatedClass>"
+            + "</mutation><mutation status=\"SURVIVED\"><sourceFile>A.java</sourceFile>"
+            + "<mutatedClass>a.A</mutatedClass></mutation></mutations>";
+
+    NormalizedMutationReport report = parser.parse(xml.getBytes(StandardCharsets.UTF_8), "x");
+
+    NormalizedMutationReport.MutationMutant mutant = report.getMutants().get(0);
+    assertEquals("KILLED", mutant.getStatus());
+    assertEquals(status, mutant.getStatusReason());
+    assertEquals(50.0, report.getSummary().getScore(), 0.001);
   }
 
   @Test

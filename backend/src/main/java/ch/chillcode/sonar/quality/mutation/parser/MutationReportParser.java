@@ -13,9 +13,8 @@ import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -36,17 +35,13 @@ public class MutationReportParser {
   private static final String STATUS_NO_COVERAGE = "NO_COVERAGE";
   private static final String STATUS_TIMEOUT = "TIMEOUT";
   private static final String STATUS_IGNORED = "IGNORED";
-  private static final String STATUS_NON_VIABLE = "NON_VIABLE";
+  private static final String STATUS_ERROR = "ERROR";
   private static final String STATUS_UNKNOWN = "UNKNOWN";
 
-  // Metric keys emitted in per-file metrics maps and consumed by the frontend.
-  private static final String METRIC_SCORE = "score";
-  private static final String METRIC_TOTAL = "total";
-  private static final String METRIC_KILLED = "killed";
-  private static final String METRIC_SURVIVED = "survived";
-  private static final String METRIC_NO_COVERAGE = "noCoverage";
-  private static final String METRIC_TIMEOUT = "timeout";
-  private static final String METRIC_IGNORED = "ignored";
+  // PIT statuses other than KILLED and TIMED_OUT that PIT's own mutation score
+  // counts as detected (org.pitest.mutationtest.DetectionStatus#isDetected).
+  private static final Set<String> PITEST_OTHER_DETECTED =
+      Set.of("NON_VIABLE", "MEMORY_ERROR", "RUN_ERROR", "EQUIVALENT");
 
   private static final String UNKNOWN = "unknown";
   private static final String LANGUAGE_PYTHON = "python";
@@ -169,120 +164,44 @@ public class MutationReportParser {
     report.setCommit(root.path("commit").asText(""));
     report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
 
-    NormalizedMutationReport.MutationSummary summary =
-        new NormalizedMutationReport.MutationSummary();
     List<NormalizedMutationReport.MutationFile> files = new ArrayList<>();
     List<NormalizedMutationReport.MutationMutant> allMutants = new ArrayList<>();
-
-    StrykerCounts counts = new StrykerCounts();
 
     JsonNode filesNode = root.path("files");
     if (filesNode.isObject()) {
       filesNode
           .fields()
           .forEachRemaining(
-              entry -> {
-                NormalizedMutationReport.MutationFile mFile =
-                    parseStrykerFile(entry.getKey(), entry.getValue(), allMutants, counts);
-                files.add(mFile);
-              });
+              entry -> files.add(parseStrykerFile(entry.getKey(), entry.getValue(), allMutants)));
     }
 
-    summary.setTotal(counts.total);
-    summary.setKilled(counts.killed);
-    summary.setSurvived(counts.survived);
-    summary.setNoCoverage(counts.noCoverage);
-    summary.setTimeout(counts.timeout);
-    summary.setIgnored(counts.ignored);
-    summary.setScore(counts.score());
-
-    report.setSummary(summary);
+    report.setSummary(ReportAssembler.summaryOf(allMutants));
     report.setFiles(files);
     report.setMutants(allMutants);
 
     return report;
   }
 
-  private static final class StrykerCounts {
-    int total;
-    int killed;
-    int survived;
-    int noCoverage;
-    int timeout;
-    int ignored;
-
-    double score() {
-      int relevant = total - ignored;
-      return relevant > 0 ? (double) killed / relevant * 100 : 0.0;
-    }
-  }
-
   private NormalizedMutationReport.MutationFile parseStrykerFile(
       String filePath,
       JsonNode fileData,
-      List<NormalizedMutationReport.MutationMutant> allMutants,
-      StrykerCounts counts) {
+      List<NormalizedMutationReport.MutationMutant> allMutants) {
     NormalizedMutationReport.MutationFile mFile = new NormalizedMutationReport.MutationFile();
     mFile.setPath(filePath);
     mFile.setLanguage(detectLanguageFromPath(filePath));
 
     List<NormalizedMutationReport.MutationMutant> fileMutants = new ArrayList<>();
-
     JsonNode mutantsNode = fileData.path("mutants");
-    StrykerCounts fileCounts = new StrykerCounts();
     if (mutantsNode.isArray()) {
       for (JsonNode mutantNode : mutantsNode) {
-        NormalizedMutationReport.MutationMutant mutant = parseStrykerMutant(mutantNode, filePath);
-        fileMutants.add(mutant);
-        allMutants.add(mutant);
-
-        counts.total++;
-        fileCounts.total++;
-        switch (mutant.getStatus()) {
-          case STATUS_KILLED -> {
-            counts.killed++;
-            fileCounts.killed++;
-          }
-          case STATUS_SURVIVED -> {
-            counts.survived++;
-            fileCounts.survived++;
-          }
-          case STATUS_NO_COVERAGE -> {
-            counts.noCoverage++;
-            fileCounts.noCoverage++;
-          }
-          case STATUS_TIMEOUT -> {
-            counts.timeout++;
-            fileCounts.timeout++;
-          }
-          case STATUS_IGNORED -> {
-            counts.ignored++;
-            fileCounts.ignored++;
-          }
-          default -> {
-            // Unhandled mutant status contributes to total but not specific counts
-          }
-        }
+        fileMutants.add(parseStrykerMutant(mutantNode, filePath));
       }
     }
+    allMutants.addAll(fileMutants);
 
     mFile.setMutants(fileMutants);
-    // Per-file breakdown so the UI's file table can show a
-    // per-file score/killed/survived instead of "N/A" - the
-    // frontend reads file.metrics.{score,killed,survived,
-    // noCoverage}, this was previously never populated.
-    int fileValid =
-        fileCounts.killed + fileCounts.survived + fileCounts.noCoverage + fileCounts.timeout;
-    java.util.Map<String, Object> fileMetrics = new java.util.HashMap<>();
-    fileMetrics.put(
-        METRIC_SCORE, fileValid > 0 ? (double) fileCounts.killed / fileValid * 100 : 0.0);
-    fileMetrics.put(METRIC_TOTAL, fileCounts.total);
-    fileMetrics.put(METRIC_KILLED, fileCounts.killed);
-    fileMetrics.put(METRIC_SURVIVED, fileCounts.survived);
-    fileMetrics.put(METRIC_NO_COVERAGE, fileCounts.noCoverage);
-    fileMetrics.put(METRIC_TIMEOUT, fileCounts.timeout);
-    fileMetrics.put(METRIC_IGNORED, fileCounts.ignored);
-    mFile.setMetrics(fileMetrics);
+    // Per-file breakdown for the UI's file table (file.metrics.{score,...}).
+    mFile.setMetrics(ReportAssembler.metricsOf(fileMutants));
     return mFile;
   }
 
@@ -323,12 +242,12 @@ public class MutationReportParser {
 
   private String mapStrykerStatus(String strykerStatus) {
     return switch (strykerStatus.toLowerCase()) {
-      case METRIC_KILLED -> STATUS_KILLED;
-      case METRIC_SURVIVED -> STATUS_SURVIVED;
+      case "killed" -> STATUS_KILLED;
+      case "survived" -> STATUS_SURVIVED;
       case "nocoverage", "no_coverage" -> STATUS_NO_COVERAGE;
-      case METRIC_TIMEOUT -> STATUS_TIMEOUT;
-      case METRIC_IGNORED -> STATUS_IGNORED;
-      case "error", "compileerror" -> "ERROR";
+      case "timeout" -> STATUS_TIMEOUT;
+      case "ignored" -> STATUS_IGNORED;
+      case "error", "compileerror", "runtimeerror" -> STATUS_ERROR;
       default -> STATUS_UNKNOWN;
     };
   }
@@ -360,98 +279,17 @@ public class MutationReportParser {
               + ">)");
     }
 
-    NormalizedMutationReport report = new NormalizedMutationReport();
-    report.setSchemaVersion(1);
-    report.setTool("pitest");
-    report.setLanguage(LANGUAGE_JAVA);
-    report.setProject(UNKNOWN);
-    report.setBranch("main");
-    report.setCommit("");
-    report.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
-
-    int total = 0;
-    int killed = 0;
-    int survived = 0;
-    int noCoverage = 0;
-    int timeout = 0;
-    int ignored = 0;
-    Map<String, List<NormalizedMutationReport.MutationMutant>> byFile = new HashMap<>();
-    List<NormalizedMutationReport.MutationMutant> allMutants = new ArrayList<>();
-
+    List<NormalizedMutationReport.MutationMutant> mutants = new ArrayList<>();
     NodeList mutationNodes = root.getElementsByTagName("mutation");
     for (int i = 0; i < mutationNodes.getLength(); i++) {
-      Element m = (Element) mutationNodes.item(i);
-      NormalizedMutationReport.MutationMutant mutant = parsePitestMutation(m, i);
-      allMutants.add(mutant);
-      byFile.computeIfAbsent(mutant.getFilePath(), k -> new ArrayList<>()).add(mutant);
-
-      total++;
-      switch (mutant.getStatus()) {
-        case STATUS_KILLED -> killed++;
-        case STATUS_SURVIVED -> survived++;
-        case STATUS_NO_COVERAGE -> noCoverage++;
-        case STATUS_TIMEOUT -> timeout++;
-        // NON_VIABLE mutants failed to compile; PIT itself excludes
-        // them from its mutation score, so they are counted here as
-        // ignored rather than survived (a compile failure is not a
-        // gap in test coverage).
-        case STATUS_NON_VIABLE -> ignored++;
-        default -> ignored++;
-      }
+      mutants.add(parsePitestMutation((Element) mutationNodes.item(i), i));
     }
+    NormalizedMutationReport report = ReportAssembler.assemble("pitest", LANGUAGE_JAVA, mutants);
 
-    List<NormalizedMutationReport.MutationFile> files = new ArrayList<>();
-    for (Map.Entry<String, List<NormalizedMutationReport.MutationMutant>> entry :
-        byFile.entrySet()) {
-      NormalizedMutationReport.MutationFile mFile = new NormalizedMutationReport.MutationFile();
-      mFile.setPath(entry.getKey());
-      mFile.setLanguage("java");
-      mFile.setMutants(entry.getValue());
-
-      int fTotal = entry.getValue().size();
-      int fKilled = 0;
-      int fSurvived = 0;
-      int fNoCoverage = 0;
-      int fTimeout = 0;
-      int fIgnored = 0;
-      for (NormalizedMutationReport.MutationMutant mutant : entry.getValue()) {
-        switch (mutant.getStatus()) {
-          case STATUS_KILLED -> fKilled++;
-          case STATUS_SURVIVED -> fSurvived++;
-          case STATUS_NO_COVERAGE -> fNoCoverage++;
-          case STATUS_TIMEOUT -> fTimeout++;
-          default -> fIgnored++;
-        }
-      }
-      int fValid = fTotal - fIgnored;
-      Map<String, Object> fileMetrics = new HashMap<>();
-      fileMetrics.put(METRIC_SCORE, fValid > 0 ? (double) fKilled / fValid * 100 : 0.0);
-      fileMetrics.put(METRIC_TOTAL, fTotal);
-      fileMetrics.put(METRIC_KILLED, fKilled);
-      fileMetrics.put(METRIC_SURVIVED, fSurvived);
-      fileMetrics.put(METRIC_NO_COVERAGE, fNoCoverage);
-      fileMetrics.put(METRIC_TIMEOUT, fTimeout);
-      fileMetrics.put(METRIC_IGNORED, fIgnored);
-      mFile.setMetrics(fileMetrics);
-      files.add(mFile);
-    }
-
-    NormalizedMutationReport.MutationSummary summary =
-        new NormalizedMutationReport.MutationSummary();
-    summary.setTotal(total);
-    summary.setKilled(killed);
-    summary.setSurvived(survived);
-    summary.setNoCoverage(noCoverage);
-    summary.setTimeout(timeout);
-    summary.setIgnored(ignored);
-    int relevant = total - ignored;
-    summary.setScore(relevant > 0 ? (double) killed / relevant * 100 : 0.0);
-
-    report.setSummary(summary);
-    report.setFiles(files);
-    report.setMutants(allMutants);
-
-    LOG.info("Parsed pitest mutation report: score={}, total={}", summary.getScore(), total);
+    LOG.info(
+        "Parsed pitest mutation report: score={}, total={}",
+        report.getSummary().getScore(),
+        report.getSummary().getTotal());
     return report;
   }
 
@@ -465,8 +303,11 @@ public class MutationReportParser {
 
     mutant.setMutatorName(shortMutatorName(textOf(m, "mutator")));
     mutant.setReplacement(textOf(m, "description"));
-    mutant.setStatus(mapPitestStatus(m.getAttribute("status")));
-    mutant.setStatusReason("");
+    // Element.getAttribute answers "" for a missing attribute, never null.
+    String pitestStatus = m.getAttribute("status").toUpperCase();
+    mutant.setStatus(mapPitestStatus(pitestStatus));
+    // Keep PIT's own status visible where it is folded into KILLED.
+    mutant.setStatusReason(PITEST_OTHER_DETECTED.contains(pitestStatus) ? pitestStatus : "");
 
     int line = parseIntOrZero(textOf(m, "lineNumber"));
     NormalizedMutationReport.MutationLocation loc = new NormalizedMutationReport.MutationLocation();
@@ -487,14 +328,21 @@ public class MutationReportParser {
     return mutant;
   }
 
+  /**
+   * Maps PIT's status so that the shared score equals PIT's own mutation score, detected mutations
+   * over all generated ones: every status PIT counts as detected becomes KILLED (TIMED_OUT stays
+   * apart as TIMEOUT, which is detected too). NOT_STARTED and STARTED never reach a final report
+   * and are left out as UNKNOWN.
+   */
   private String mapPitestStatus(String pitestStatus) {
-    // Element.getAttribute answers "" for a missing attribute, never null.
-    return switch (pitestStatus.toUpperCase()) {
+    if (PITEST_OTHER_DETECTED.contains(pitestStatus)) {
+      return STATUS_KILLED;
+    }
+    return switch (pitestStatus) {
       case STATUS_KILLED -> STATUS_KILLED;
       case STATUS_SURVIVED -> STATUS_SURVIVED;
       case STATUS_NO_COVERAGE -> STATUS_NO_COVERAGE;
       case "TIMED_OUT" -> STATUS_TIMEOUT;
-      case STATUS_NON_VIABLE -> STATUS_NON_VIABLE;
       default -> STATUS_UNKNOWN;
     };
   }
