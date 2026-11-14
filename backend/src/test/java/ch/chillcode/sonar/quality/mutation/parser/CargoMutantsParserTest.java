@@ -72,8 +72,9 @@ class CargoMutantsParserTest {
   }
 
   @Test
-  void leavesAnUnviableMutantOutOfTheScore() throws IOException {
-    assertEquals(100.0 / 3, parse().getSummary().getScore(), 1e-9);
+  void leavesAnUnviableMutantOutOfTheScoreAndCountsTheTimeoutAsDetected() throws IOException {
+    // Caught and timed out over caught, missed and timed out.
+    assertEquals(200.0 / 3, parse().getSummary().getScore(), 1e-9);
   }
 
   @Test

@@ -8,7 +8,7 @@ SonarQube plugin for mutation-testing data. It adds mutation metrics, a quality 
 |---|---|---|
 | Stryker | Raw `mutation.json` | No. The plugin parses Stryker JSON directly. |
 | PITest | Raw `mutations.xml` | No. The plugin parses PITest XML directly. |
-| cargo-mutants | Raw `mutants.out/outcomes.json` | No. The plugin parses it directly; unviable mutants are left out of the score, as PITest's non-viable ones are. |
+| cargo-mutants | Raw `mutants.out/outcomes.json` | No. The plugin parses it directly; unviable mutants are left out of the score. |
 | mutant (Ruby) 0.16+ | A session file from `.mutant/results/` | No. The plugin parses it directly; only `evil` mutations count, and locations are accurate at method granularity. |
 | mutmut 3.x | `mutants/` artifacts from `mutmut run` | Yes. Use the bundled `scripts/mutmut_to_stryker.py` converter or wrapper. |
 | Stryker-compatible JSON | JSON with `schemaVersion` and `files` | No. The plugin parses it directly. |
@@ -177,7 +177,7 @@ The helper sends the commit as a `commit` query parameter, which the server igno
 
 After a report has been uploaded and a later analysis has published the custom measure, add `mutation_score < 60` as an Error condition to the relevant SonarQube Quality Gate.
 
-The analysis publishes `mutation_score` (percent), the counts `mutation_total`, `mutation_killed`, `mutation_survived`, `mutation_no_coverage`, `mutation_timeout` and `mutation_ignored`, and `mutation_tool` and `mutation_language`. `mutation_duration` is defined but never written. The score is killed mutants over all mutants except ignored ones.
+The analysis publishes `mutation_score` (percent), the counts `mutation_total`, `mutation_killed`, `mutation_survived`, `mutation_no_coverage`, `mutation_timeout` and `mutation_ignored`, and `mutation_tool` and `mutation_language`. `mutation_duration` is defined but never written. The score, overall and per file, is Stryker's mutation score: detected mutants (killed and timed out) over valid ones (detected, survived and no coverage). Ignored, compile-error, runtime-error, non-viable and unknown mutants are counted in `mutation_ignored` and left out of the score. PITest reports are scored as PITest scores them, detected mutations over all mutations: its `NON_VIABLE`, `MEMORY_ERROR`, `RUN_ERROR` and `EQUIVALENT` statuses count as detected, so they are reported as killed with the PITest status as the mutant's status reason. The score is computed when a report is uploaded, so a stored report keeps its score until the next upload.
 
 ## Development checks
 

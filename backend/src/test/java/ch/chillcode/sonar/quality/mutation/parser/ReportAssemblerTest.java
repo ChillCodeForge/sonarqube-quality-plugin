@@ -19,7 +19,7 @@ class ReportAssemblerTest {
   }
 
   @Test
-  void countsEveryNormalizedStatusAndIgnoresTheRest() {
+  void scoresDetectedMutantsOverValidOnesAndLeavesTheRestOut() {
     NormalizedMutationReport report =
         ReportAssembler.assemble(
             "tool",
@@ -29,21 +29,27 @@ class ReportAssemblerTest {
                 mutant("a", "SURVIVED"),
                 mutant("b", "NO_COVERAGE"),
                 mutant("b", "TIMEOUT"),
-                mutant("b", "NON_VIABLE")));
+                mutant("b", "NON_VIABLE"),
+                mutant("b", "ERROR")));
 
     NormalizedMutationReport.MutationSummary summary = report.getSummary();
-    assertEquals(5, summary.getTotal());
+    assertEquals(6, summary.getTotal());
     assertEquals(1, summary.getKilled());
     assertEquals(1, summary.getSurvived());
     assertEquals(1, summary.getNoCoverage());
     assertEquals(1, summary.getTimeout());
-    assertEquals(1, summary.getIgnored());
-    assertEquals(25.0, summary.getScore(), 1e-9);
+    assertEquals(2, summary.getIgnored());
+    // Stryker's definition: detected (killed + timeout) over valid
+    // (detected + survived + no coverage) = 2 / 4.
+    assertEquals(50.0, summary.getScore(), 1e-9);
 
     Map<String, Object> fileB = report.getFiles().get(1).getMetrics();
     assertEquals("b", report.getFiles().get(1).getPath());
     assertEquals(1, fileB.get("noCoverage"));
-    assertEquals(0.0, (double) fileB.get("score"), 1e-9);
+    assertEquals(1, fileB.get("timeout"));
+    assertEquals(2, fileB.get("ignored"));
+    // The timeout is detected, the uncovered mutant is not.
+    assertEquals(50.0, (double) fileB.get("score"), 1e-9);
   }
 
   @Test
