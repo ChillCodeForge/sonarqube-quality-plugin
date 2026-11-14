@@ -24,34 +24,36 @@ class MutationReportGuardTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"AssetAllocator", "real-life-rpg", "chillcode-website"})
+  @ValueSource(
+      strings = {
+        "AssetAllocator",
+        "real-life-rpg",
+        "chillcode-website",
+        "nutrition",
+        "doccomplete"
+      })
   void acceptsTheStoredGoodReports(String project) throws IOException {
+    // nutrition: 883 CompileErrors, 109 timeouts and 6 RuntimeErrors in 2787 scored mutants
+    // (4.1 %); doccomplete: one RuntimeError in 2800.
     assertEquals(List.of(), problemsOf(project));
+  }
+
+  @Test
+  void acceptsTheStoredPitestReportOfWalletchartInTheNormalizedFormat() throws IOException {
+    assertEquals(
+        List.of(),
+        MutationReportGuard.problems(
+            parser.parse(StoredReports.normalized("Walletchart"), "mutation.json")));
   }
 
   @Test
   void rejectsTheMassTimeoutNightlyOfDevelopmentStandards() throws IOException {
     assertEquals(
         List.of(
-            "6733 of 7606 scored mutants timed out (88.5 %, limit 10 %): a share this high means"
-                + " the test runner overran its timeouts, not that the mutants loop"),
+            "6733 timed out and 0 ended in RuntimeError, 88.5 % of the 7606 scored mutants"
+                + " (limit 10 % together): a share this high means the test runner overran its"
+                + " timeouts or crashed, not that the tests decided the mutants"),
         problemsOf("development-standards"));
-  }
-
-  @Test
-  void rejectsRuntimeErrorsButNotCompileErrorsOrALowTimeoutShare() throws IOException {
-    // nutrition: 883 CompileErrors and 109 of 2787 scored mutants timing out (3.9 %) are fine,
-    // its 6 crashed test runs are not.
-    assertEquals(
-        List.of(
-            "6 mutants ended in RuntimeError (the test runner crashed instead of judging them),"
-                + " first in src/pages/SettingsPage.tsx"),
-        problemsOf("nutrition"));
-    assertEquals(
-        List.of(
-            "1 mutant ended in RuntimeError (the test runner crashed instead of judging it),"
-                + " first in src/api/matchingApi.ts"),
-        problemsOf("doccomplete"));
   }
 
   private static MutationMutant mutant(String status) {
@@ -77,11 +79,31 @@ class MutationReportGuardTest {
     assertEquals(List.of(), MutationReportGuard.problems(report("TIMEOUT=10", "KILLED=90")));
     List<String> problems = MutationReportGuard.problems(report("TIMEOUT=11", "KILLED=89"));
     assertEquals(1, problems.size());
-    assertTrue(problems.get(0).startsWith("11 of 100 scored mutants timed out (11.0 %"));
+    assertTrue(
+        problems.get(0).startsWith("11 timed out and 0 ended in RuntimeError, 11.0 % of the 100"));
   }
 
   @Test
-  void ignoredAndCompileErrorMutantsDoNotDiluteTheTimeoutShare() {
+  void countsRuntimeErrorsAgainstTheSameLimitAsTimeouts() {
+    // RuntimeErrors are not scored: 10 unsettled of 100 scored mutants is the limit.
+    assertEquals(
+        List.of(),
+        MutationReportGuard.problems(report("TIMEOUT=4", "RUNTIME_ERROR=6", "KILLED=96")));
+    assertEquals(
+        List.of(
+            "4 timed out and 7 ended in RuntimeError, 11.0 % of the 100 scored mutants"
+                + " (limit 10 % together): a share this high means the test runner overran its"
+                + " timeouts or crashed, not that the tests decided the mutants"),
+        MutationReportGuard.problems(report("TIMEOUT=4", "RUNTIME_ERROR=7", "KILLED=96")));
+  }
+
+  @Test
+  void rejectsRuntimeErrorsWhenNothingWasScored() {
+    assertEquals(1, MutationReportGuard.problems(report("RUNTIME_ERROR=1")).size());
+  }
+
+  @Test
+  void ignoredAndCompileErrorMutantsDoNotDiluteTheShare() {
     // 2 of 10 scored mutants (20 %) time out; 90 compile errors leave the share unchanged.
     assertEquals(
         1,
@@ -89,18 +111,41 @@ class MutationReportGuardTest {
   }
 
   @Test
-  void rejectsMutantsWithoutAFinalStatusAsAnIncompleteReport() {
+  void acceptsEveryDocumentedStatus() {
+    assertEquals(
+        List.of(),
+        MutationReportGuard.problems(
+            report(
+                "KILLED=96",
+                "SURVIVED=1",
+                "NO_COVERAGE=1",
+                "TIMEOUT=1",
+                "RUNTIME_ERROR=1",
+                "COMPILE_ERROR=1",
+                "ERROR=1",
+                "IGNORED=1")));
+  }
+
+  @Test
+  void rejectsEveryStatusOutsideTheDocumentedListByName() {
+    List<MutationMutant> mutants = new ArrayList<>(report("KILLED=5").getMutants());
+    mutants.add(mutant("UNKNOWN"));
+    mutants.add(mutant("PENDING"));
+    mutants.add(mutant("UNKNOWN"));
+    mutants.add(mutant("RuntimeError"));
+    mutants.add(mutant(null));
     assertEquals(
         List.of(
-            "2 mutants have no final status (pending or unknown), first in src/a.ts:"
-                + " the report is incomplete"),
-        MutationReportGuard.problems(report("KILLED=5", "UNKNOWN=2")));
+            "5 mutants have a status outside the documented list (UNKNOWN 2, PENDING 1,"
+                + " RuntimeError 1, missing 1), first in src/a.ts: the run did not finish or the"
+                + " report is not normalized"),
+        MutationReportGuard.problems(ReportAssembler.assemble("stryker", "typescript", mutants)));
   }
 
   @Test
   void reportsEveryProblemAtOnce() {
     assertEquals(
-        3,
+        2,
         MutationReportGuard.problems(report("TIMEOUT=5", "RUNTIME_ERROR=1", "UNKNOWN=1")).size());
   }
 
@@ -115,17 +160,15 @@ class MutationReportGuardTest {
   @Test
   void checksTheMutantsOfANormalizedUploadThatListsThemOnlyPerFile() throws IOException {
     String perFile =
-        "{\"tool\":\"stryker\",\"summary\":{},\"files\":["
+        "{\"tool\":\"stryker\",\"summary\":{},\"mutants\":[],\"files\":["
             + "{\"path\":\"src/a.ts\",\"mutants\":[{\"status\":\"KILLED\"}]},"
             + "{\"path\":\"src/b.ts\"},"
-            + "{\"path\":\"src/c.ts\",\"mutants\":[{\"status\":\"UNKNOWN\",\"filePath\":\"src/c.ts\"}]}]}";
+            + "{\"path\":\"src/c.ts\",\"mutants\":[{\"status\":\"PENDING\"},"
+            + "{\"status\":\"KILLED\",\"filePath\":\"src/c.ts\"}]}]}";
     assertEquals(
         List.of(
-            "1 mutant has no final status (pending or unknown), first in src/c.ts:"
-                + " the report is incomplete"),
+            "1 mutant has a status outside the documented list (PENDING 1), first in src/c.ts:"
+                + " the run did not finish or the report is not normalized"),
         MutationReportGuard.problems(parser.parse(perFile)));
-    assertEquals(
-        List.of(),
-        MutationReportGuard.problems(parser.parse("{\"tool\":\"stryker\",\"summary\":{}}")));
   }
 }

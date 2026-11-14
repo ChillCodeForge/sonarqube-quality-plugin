@@ -3,6 +3,7 @@ package ch.chillcode.sonar.quality.mutation.api;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportGuard;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportRejectedException;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -271,17 +272,7 @@ public class MutationWebService implements WebService {
       NormalizedMutationReport report = parser.parse(content, PARAM_REPORT);
       List<String> problems = MutationReportGuard.problems(report);
       if (!problems.isEmpty()) {
-        // 422 with every reason, so the CI upload step fails and its log says why; the stored
-        // report stays the last trustworthy one.
-        writeText(
-            response,
-            422,
-            "Rejected mutation report for "
-                + projectKey
-                + " ("
-                + branch
-                + "), nothing was stored: "
-                + String.join("; ", problems));
+        reject(response, projectKey, branch, String.join("; ", problems));
         return;
       }
       // The report body (raw Stryker JSON / PITest XML) has no
@@ -303,9 +294,28 @@ public class MutationWebService implements WebService {
             .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
             .endObject();
       }
+    } catch (MutationReportRejectedException e) {
+      reject(response, projectKey, branch, e.getMessage());
     } catch (IOException e) {
       writeText(response, 400, "Bad Request: " + e.getMessage());
     }
+  }
+
+  /**
+   * 422 with every reason, so the CI upload step fails and its log says why; the stored report
+   * stays the last trustworthy one.
+   */
+  private static void reject(Response response, String projectKey, String branch, String reasons)
+      throws IOException {
+    writeText(
+        response,
+        422,
+        "Rejected mutation report for "
+            + projectKey
+            + " ("
+            + branch
+            + "), nothing was stored: "
+            + reasons);
   }
 
   private void handleDownload(Request request, Response response) throws Exception {

@@ -9,14 +9,17 @@ TypeScript checker errors (`CompileError`), and stored `UNKNOWN` mutants with
 Stryker's "Test runner crashed. Tried twice to restart it" reason are its
 `RuntimeError`.
 
-| project | mutants | timeout share of scored | RuntimeError | role |
-|---|---|---|---|---|
-| development-standards | 7606 | 88.5 % | 0 | mass-timeout nightly (tap runner fix pending) |
-| nutrition | 3676 | 3.9 % | 6 | 883 CompileErrors; rejected for RuntimeErrors |
-| doccomplete | 2801 | 0 % | 1 | rejected for its RuntimeError |
-| AssetAllocator | 1037 | 0.3 % | 0 | good |
-| real-life-rpg | 411 | 1.7 % | 0 | good |
-| chillcode-website | 34 | 2.9 % | 0 | good |
+| project | mutants | timeouts + RuntimeErrors, share of scored | role |
+|---|---|---|---|
+| development-standards | 7606 | 6733 + 0 = 88.5 % | mass-timeout nightly (tap runner fix pending): rejected |
+| nutrition | 3676 | 109 + 6 = 4.1 % | 883 CompileErrors; accepted |
+| doccomplete | 2801 | 0 + 1 = 0.04 % | accepted |
+| AssetAllocator | 1037 | 3 + 0 = 0.3 % | accepted |
+| real-life-rpg | 411 | 7 + 0 = 1.7 % | accepted |
+| chillcode-website | 34 | 1 + 0 = 2.9 % | accepted |
 
-The stored PITest report (Walletchart, 0.15 % timeouts) is not rebuilt here:
-PIT XML needs fields the normalized report drops.
+The stored PITest report (Walletchart, 1 timeout in 685 mutants, 0.15 %) is not
+rebuilt as PIT XML, which needs fields the normalized report drops.
+`Walletchart.normalized.json.gz` is that stored report in the normalized
+format instead, with its top-level mutants (without `coveredBy`) and its stored
+summary, but without the per-file list the plugin rebuilds from the mutants.
