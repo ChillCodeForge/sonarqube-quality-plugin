@@ -8,7 +8,7 @@ SonarQube plugin for mutation-testing data. It adds mutation metrics, a quality 
 |---|---|---|
 | Stryker | Raw `mutation.json` | No. The plugin parses Stryker JSON directly. |
 | PITest | Raw `mutations.xml` | No. The plugin parses PITest XML directly. |
-| cargo-mutants | Raw `mutants.out/outcomes.json` | No. The plugin parses it directly; unviable mutants are left out of the score, as PITest's non-viable ones are. |
+| cargo-mutants | Raw `mutants.out/outcomes.json` | No. The plugin parses it directly; unviable mutants are left out of the score. |
 | mutant (Ruby) 0.16+ | A session file from `.mutant/results/` | No. The plugin parses it directly; only `evil` mutations count, and locations are accurate at method granularity. |
 | mutmut 3.x | `mutants/` artifacts from `mutmut run` | Yes. Use the bundled `scripts/mutmut_to_stryker.py` converter or wrapper. |
 | Stryker-compatible JSON | JSON with `schemaVersion` and `files` | No. The plugin parses it directly. |
@@ -49,6 +49,10 @@ Replacing a SonarQube plugin JAR requires a SonarQube restart or stack redeploym
 The runtime storage default is `/opt/sonarqube/mutation-reports`. Reports are stored under the `projectKey` and `branch` submitted with the upload request; those request parameters override report metadata.
 
 The upload token is read once at startup from exactly `/run/secrets/chillcode_mutation_upload_token`. Outside Docker Swarm, write the token to that path, readable by the SonarQube user, before starting SonarQube; `/run` is usually cleared on reboot, so recreate it at boot (for example with a `systemd-tmpfiles` rule). Without it, upload and delete answer 503.
+
+### Deployment from Drone
+
+The pipeline step `release-deploy-plugin` runs `.ci/deploy.sh`, which uploads the JAR to `infra-swarm` and runs `.ci/deploy-remote.sh` there. The key in the Drone secret `sonarqube_plugin_deploy_key` logs in as the SSH user `omarchy`, not as `ansible`. That account has passwordless sudo for the Docker Swarm commands and for the protected plugin directory, whose files stay owned by `ansible:ansible`. The remote script saves the previous JAR as `*.previous` during the rollout, forces a SonarQube service update, waits for `status: UP` and checks the installed JAR's SHA-256 against the build artifact. If any of that fails it restores the previous JAR (or removes the new one on a first install) and rolls out again; after success it deletes the backup. The mutation upload token is created once as the Swarm secret `sonarqube_mutation_upload_token`.
 
 ### Configuration
 
@@ -173,7 +177,7 @@ The helper sends the commit as a `commit` query parameter, which the server igno
 
 After a report has been uploaded and a later analysis has published the custom measure, add `mutation_score < 60` as an Error condition to the relevant SonarQube Quality Gate.
 
-The analysis publishes `mutation_score` (percent), the counts `mutation_total`, `mutation_killed`, `mutation_survived`, `mutation_no_coverage`, `mutation_timeout` and `mutation_ignored`, and `mutation_tool` and `mutation_language`. `mutation_duration` is defined but never written. The score is killed mutants over all mutants except ignored ones.
+The analysis publishes `mutation_score` (percent), the counts `mutation_total`, `mutation_killed`, `mutation_survived`, `mutation_no_coverage`, `mutation_timeout` and `mutation_ignored`, and `mutation_tool` and `mutation_language`. `mutation_duration` is defined but never written. The score, overall and per file, is Stryker's mutation score: detected mutants (killed and timed out) over valid ones (detected, survived and no coverage). Ignored, compile-error, runtime-error, non-viable and unknown mutants are counted in `mutation_ignored` and left out of the score. PITest reports are scored as PITest scores them, detected mutations over all mutations: its `NON_VIABLE`, `MEMORY_ERROR`, `RUN_ERROR` and `EQUIVALENT` statuses count as detected, so they are reported as killed with the PITest status as the mutant's status reason. The score is computed when a report is uploaded, so a stored report keeps its score until the next upload.
 
 ## Development checks
 

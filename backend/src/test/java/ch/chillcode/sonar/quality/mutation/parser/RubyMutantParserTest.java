@@ -84,7 +84,8 @@ class RubyMutantParserTest {
     assertEquals(2, summary.getKilled());
     assertEquals(1, summary.getSurvived());
     assertEquals(1, summary.getTimeout());
-    assertEquals(50.0, summary.getScore(), 1e-9);
+    // The timeout is detected: 3 of 4.
+    assertEquals(75.0, summary.getScore(), 1e-9);
   }
 
   @Test
