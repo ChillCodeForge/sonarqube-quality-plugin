@@ -38,7 +38,7 @@ public final class MutationReportGuard {
 
   /** Every reason to reject {@code report}, in a sentence each; empty when it may be stored. */
   public static List<String> problems(NormalizedMutationReport report) {
-    List<MutationMutant> mutants = report.getMutants() == null ? List.of() : report.getMutants();
+    List<MutationMutant> mutants = mutantsOf(report);
     List<String> problems = new ArrayList<>();
     timeoutProblem(ReportAssembler.summaryOf(mutants)).ifPresent(problems::add);
     List<MutationMutant> crashed = withStatus(mutants, RUNTIME_ERROR);
@@ -83,6 +83,23 @@ public final class MutationReportGuard {
             scored,
             summary.getTimeout() * 100.0 / scored,
             MAX_TIMEOUT_PERCENT));
+  }
+
+  /**
+   * The report's mutants. An upload in the already normalized format may carry them only per file;
+   * those count as well, so leaving out the top-level list cannot skip the checks.
+   */
+  private static List<MutationMutant> mutantsOf(NormalizedMutationReport report) {
+    if (report.getMutants() != null) {
+      return report.getMutants();
+    }
+    if (report.getFiles() == null) {
+      return List.of();
+    }
+    return report.getFiles().stream()
+        .filter(file -> file.getMutants() != null)
+        .flatMap(file -> file.getMutants().stream())
+        .toList();
   }
 
   private static List<MutationMutant> withStatus(List<MutationMutant> mutants, String status) {

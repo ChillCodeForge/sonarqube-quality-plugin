@@ -467,6 +467,23 @@ class MutationReportParserTest {
   }
 
   @Test
+  void strykerShapedGenericErrorStaysError() throws IOException {
+    // development-standards' mutmut_to_stryker.py writes mutmut's crash exit codes as "ERROR":
+    // neither a CompileError nor a RuntimeError, left out of the score as before.
+    String json =
+        """
+        {"schemaVersion": 1, "files": {"a.py": {"mutants": [
+          {"id": "1", "mutatorName": "M", "replacement": "", "status": "ERROR"}
+        ]}}}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals("ERROR", report.getMutants().get(0).getStatus());
+    assertEquals(1, report.getSummary().getIgnored());
+  }
+
+  @Test
   void strykerCountsTimeoutsAsDetected() throws IOException {
     // Shape of a report dominated by timeouts (development-standards:
     // 257 killed, 6733 timeout, 616 survived): timeouts must raise the

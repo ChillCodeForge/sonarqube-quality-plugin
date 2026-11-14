@@ -111,4 +111,21 @@ class MutationReportGuardTest {
         MutationReportGuard.problems(
             parser.parse("<mutations></mutations>".getBytes(StandardCharsets.UTF_8), "x.xml")));
   }
+
+  @Test
+  void checksTheMutantsOfANormalizedUploadThatListsThemOnlyPerFile() throws IOException {
+    String perFile =
+        "{\"tool\":\"stryker\",\"summary\":{},\"files\":["
+            + "{\"path\":\"src/a.ts\",\"mutants\":[{\"status\":\"KILLED\"}]},"
+            + "{\"path\":\"src/b.ts\"},"
+            + "{\"path\":\"src/c.ts\",\"mutants\":[{\"status\":\"UNKNOWN\",\"filePath\":\"src/c.ts\"}]}]}";
+    assertEquals(
+        List.of(
+            "1 mutant has no final status (pending or unknown), first in src/c.ts:"
+                + " the report is incomplete"),
+        MutationReportGuard.problems(parser.parse(perFile)));
+    assertEquals(
+        List.of(),
+        MutationReportGuard.problems(parser.parse("{\"tool\":\"stryker\",\"summary\":{}}")));
+  }
 }
