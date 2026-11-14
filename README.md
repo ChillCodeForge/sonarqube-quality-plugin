@@ -81,6 +81,16 @@ Use the target SonarQube server's configured authentication policy and keep cred
 
 A successful upload stores the report. A subsequent SonarQube analysis of that project publishes the stored mutation data as custom measures: the server's Compute Engine reads the report while processing the analysis. Each branch analysis publishes the report uploaded for that branch (`sonar.branch.name`, `main` when unset); a branch without an upload gets no mutation measures. Pull request analyses get none, because uploads are per branch.
 
+The plugin computes every count and score itself from the report's mutants; it never stores or publishes counts or a score the upload supplies. A report in the normalized format (the `schemas/mutation-report-v1.schema.json` shape the `download` action returns) is rebuilt from its mutants: the top-level `mutants` list, or the per-file lists when that one is missing or empty. Its `summary` and per-file `metrics` are ignored, so a normalized upload without mutants is refused.
+
+The upload refuses, with HTTP 422 and every reason in the plain-text body, a report that cannot be rebuilt or whose numbers describe the test runner rather than the tests, and keeps the stored report:
+
+- a normalized report lists no mutants;
+- timeouts and Stryker `RuntimeError`s (the test runner crashed) together exceed 10 % of the scored mutants (killed, timed out, survived, no coverage). The reports stored on 2026-11-14 stay at or below 4.1 %; a mass-timeout nightly reached 88.5 %;
+- a mutant's status is missing or outside the documented list `KILLED`, `SURVIVED`, `NO_COVERAGE`, `TIMEOUT`, `IGNORED`, `COMPILE_ERROR`, `RUNTIME_ERROR`, `ERROR`. The parsers turn a status they do not know, such as Stryker `Pending` or PIT `NOT_STARTED`/`STARTED`, into `UNKNOWN`, which is refused as well; the body names each refused status.
+
+CompileErrors and other ignored outcomes stay allowed. `curl --fail` and `scripts/upload-mutation-report.sh` exit non-zero on it, so the CI step fails visibly.
+
 When the scanner runs in the same job that produced the report, `sonar.chillcode.mutationReport` can instead point the scanner-side sensor at the local report file. For that analysis the local report takes precedence over a stored one.
 
 ### Stryker

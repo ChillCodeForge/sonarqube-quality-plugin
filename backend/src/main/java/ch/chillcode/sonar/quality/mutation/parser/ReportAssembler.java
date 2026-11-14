@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Builds a normalized report from a flat list of mutants whose statuses are already normalized: the
@@ -81,7 +82,8 @@ final class ReportAssembler {
     Counts counts = new Counts();
     for (MutationMutant mutant : mutants) {
       counts.total++;
-      switch (mutant.getStatus()) {
+      // A missing status counts as ignored here; the upload guard rejects it.
+      switch (Objects.requireNonNullElse(mutant.getStatus(), "")) {
         case "KILLED" -> counts.killed++;
         case "SURVIVED" -> counts.survived++;
         case "NO_COVERAGE" -> counts.noCoverage++;

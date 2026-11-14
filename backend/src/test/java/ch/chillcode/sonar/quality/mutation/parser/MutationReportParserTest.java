@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.chillcode.sonar.quality.mutation.StoredReports;
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -324,7 +325,9 @@ class MutationReportParserTest {
     assertEquals(1, calcFile.getMetrics().get("noCoverage"));
     assertEquals(1, calcFile.getMetrics().get("timeout"));
     assertEquals(3, calcFile.getMetrics().get("ignored"));
-    assertEquals("ERROR", calcFile.getMutants().get(6).getStatus());
+    // Stryker's two error kinds stay apart: the upload guard rejects RuntimeErrors only.
+    assertEquals("COMPILE_ERROR", calcFile.getMutants().get(5).getStatus());
+    assertEquals("RUNTIME_ERROR", calcFile.getMutants().get(6).getStatus());
 
     NormalizedMutationReport.MutationMutant m1 = calcFile.getMutants().get(0);
     assertEquals("1", m1.getId());
@@ -406,19 +409,136 @@ class MutationReportParserTest {
     String json =
         """
         {"schemaVersion": 1, "tool": "pitest", "language": "java", "project": "p",
-         "summary": {"total": 4, "killed": 3, "score": 75.0}}
+         "branch": "feature", "commit": "abc", "summary": {"total": 1, "killed": 1, "score": 100.0},
+         "mutants": [{"id": "1", "status": "KILLED", "filePath": "a/A.java"}]}
         """;
 
     NormalizedMutationReport report = parser.parse(json);
 
     assertEquals("pitest", report.getTool());
+    assertEquals("java", report.getLanguage());
     assertEquals("p", report.getProject());
-    assertEquals(4, report.getSummary().getTotal());
-    assertEquals(75.0, report.getSummary().getScore(), 0.001);
+    assertEquals("feature", report.getBranch());
+    assertEquals("abc", report.getCommit());
+    assertEquals(1, report.getSummary().getTotal());
+    assertEquals(100.0, report.getSummary().getScore(), 0.001);
+  }
+
+  @Test
+  void rebuildsTheSummaryAndFileMetricsOfANormalizedReportFromItsMutants() throws IOException {
+    // The uploaded summary and file metrics claim 50 timeouts and a perfect score; the one
+    // listed mutant survived.
+    String json =
+        """
+        {"tool": "stryker", "summary": {"total": 51, "killed": 1, "timeout": 50, "score": 100},
+         "files": [{"path": "src/a.ts", "metrics": {"score": 100, "timeout": 50},
+                    "mutants": [{"id": "1", "status": "SURVIVED"}]}]}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals(1, report.getSummary().getTotal());
+    assertEquals(0, report.getSummary().getTimeout());
+    assertEquals(1, report.getSummary().getSurvived());
+    assertEquals(0.0, report.getSummary().getScore(), 0.001);
+    assertEquals(1, report.getFiles().size());
+    NormalizedMutationReport.MutationFile file = report.getFiles().get(0);
+    assertEquals("src/a.ts", file.getPath());
+    assertEquals(0, file.getMetrics().get("timeout"));
+    assertEquals(0.0, (double) file.getMetrics().get("score"), 0.001);
+    // Per-file mutants also become the top-level list, each with its file's path.
+    assertEquals(1, report.getMutants().size());
+    assertEquals("src/a.ts", report.getMutants().get(0).getFilePath());
+  }
+
+  @Test
+  void rebuildsANormalizedReportFromItsTopLevelMutantsWhenItHasThem() throws IOException {
+    String json =
+        """
+        {"tool": "stryker", "summary": {"total": 2, "killed": 2, "score": 100},
+         "mutants": [{"status": "KILLED", "filePath": "src/a.ts"},
+                     {"status": "TIMEOUT", "filePath": "src/b.ts"}],
+         "files": [{"path": "src/a.ts", "mutants": [{"status": "KILLED"}]}]}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals(1, report.getSummary().getKilled());
+    assertEquals(1, report.getSummary().getTimeout());
+    assertEquals(
+        List.of("src/a.ts", "src/b.ts"),
+        report.getFiles().stream().map(NormalizedMutationReport.MutationFile::getPath).toList());
+  }
+
+  @Test
+  void readsADownloadedNormalizedReportAsNormalizedNotAsStryker() throws IOException {
+    // What the download action returns: schemaVersion and a files list (Stryker's files is an
+    // object keyed by path).
+    String json =
+        """
+        {"schemaVersion": 1, "tool": "stryker", "summary": {"total": 1, "killed": 1, "score": 100},
+         "files": [{"path": "a.ts", "mutants": [{"status": "TIMEOUT", "filePath": "a.ts"}]}],
+         "mutants": [{"status": "TIMEOUT", "filePath": "a.ts"}]}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals(1, report.getSummary().getTotal());
+    assertEquals(1, report.getSummary().getTimeout());
+    assertEquals(0, report.getSummary().getKilled());
+  }
+
+  @Test
+  void rescoresARealNormalizedReportWithTheSharedScorer() throws IOException {
+    // Walletchart's stored summary says 96.79 (663 killed of 685), scored before the timeout
+    // counted as detected; the rebuilt score is PIT's own, (663 + 1) of 685.
+    NormalizedMutationReport report =
+        parser.parse(StoredReports.normalized("Walletchart"), "mutation.json");
+
+    assertEquals(685, report.getSummary().getTotal());
+    assertEquals(663, report.getSummary().getKilled());
+    assertEquals(1, report.getSummary().getTimeout());
+    assertEquals(664 * 100.0 / 685, report.getSummary().getScore(), 0.001);
+    assertEquals(59, report.getFiles().size());
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"{}", "{\"tool\": \"pitest\"}", "{\"summary\": {}}"})
+  @ValueSource(
+      strings = {
+        "{\"tool\": \"stryker\", \"summary\": {\"total\": 7606, \"timeout\": 6733, \"score\": 91.9}}",
+        "{\"tool\": \"stryker\", \"summary\": {}, \"mutants\": [], \"files\": [{\"path\": \"a.ts\"}]}",
+        "{\"schemaVersion\": 1, \"tool\": \"stryker\", \"summary\": {\"total\": 5}, \"files\": []}"
+      })
+  void rejectsANormalizedReportWithoutMutants(String json) {
+    MutationReportRejectedException ex =
+        assertThrows(MutationReportRejectedException.class, () -> parser.parse(json));
+
+    assertEquals(
+        "the report lists no mutants: an upload in the normalized format must carry them,"
+            + " its summary is rebuilt from them",
+        ex.getMessage());
+  }
+
+  @Test
+  void rejectsANormalizedUploadWithoutMutantsAsSuch() {
+    byte[] content =
+        "{\"tool\": \"stryker\", \"summary\": {\"total\": 3}}".getBytes(StandardCharsets.UTF_8);
+
+    assertThrows(MutationReportRejectedException.class, () -> parser.parse(content, "report"));
+  }
+
+  @Test
+  void countsAMutantWithoutStatusAsIgnoredInsteadOfFailing() throws IOException {
+    NormalizedMutationReport report =
+        parser.parse(
+            "{\"tool\": \"stryker\", \"summary\": {}, \"mutants\": [{\"filePath\": \"a.ts\"}]}");
+
+    assertEquals(1, report.getSummary().getIgnored());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"{}", "{\"tool\": \"pitest\"}", "{\"summary\": {}}", "{\"schemaVersion\": 1}"})
   void rejectsJsonOfNoKnownFormat(String json) {
     IOException ex = assertThrows(IOException.class, () -> parser.parse(json));
 
@@ -462,6 +582,23 @@ class MutationReportParserTest {
     assertEquals(1, report.getSummary().getTotal());
     assertEquals(1, report.getSummary().getIgnored());
     assertEquals(0.0, report.getSummary().getScore(), 0.001);
+  }
+
+  @Test
+  void strykerShapedGenericErrorStaysError() throws IOException {
+    // development-standards' mutmut_to_stryker.py writes mutmut's crash exit codes as "ERROR":
+    // neither a CompileError nor a RuntimeError, left out of the score as before.
+    String json =
+        """
+        {"schemaVersion": 1, "files": {"a.py": {"mutants": [
+          {"id": "1", "mutatorName": "M", "replacement": "", "status": "ERROR"}
+        ]}}}
+        """;
+
+    NormalizedMutationReport report = parser.parse(json);
+
+    assertEquals("ERROR", report.getMutants().get(0).getStatus());
+    assertEquals(1, report.getSummary().getIgnored());
   }
 
   @Test

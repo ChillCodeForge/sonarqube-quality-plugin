@@ -1,7 +1,9 @@
 package ch.chillcode.sonar.quality.mutation.api;
 
 import ch.chillcode.sonar.quality.mutation.model.NormalizedMutationReport;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportGuard;
 import ch.chillcode.sonar.quality.mutation.parser.MutationReportParser;
+import ch.chillcode.sonar.quality.mutation.parser.MutationReportRejectedException;
 import ch.chillcode.sonar.quality.mutation.storage.MutationReportStorageService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -262,11 +264,9 @@ public class MutationWebService implements WebService {
     String projectKey = request.mandatoryParam(PARAM_PROJECT_KEY);
     String branch = branchOf(request);
 
-    try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
-        GZIPInputStream gis = new GZIPInputStream(is)) {
-
-      byte[] content = readLimited(gis, storage.getMaxReportSize());
-      NormalizedMutationReport report = parser.parse(content, PARAM_REPORT);
+    try {
+      NormalizedMutationReport report = parser.parse(readReport(request), PARAM_REPORT);
+      MutationReportGuard.check(report);
       // The report body (raw Stryker JSON / PITest XML) has no
       // reliable project identifier of its own - the projectKey/
       // branch the caller passed as query params are the source of
@@ -286,9 +286,36 @@ public class MutationWebService implements WebService {
             .prop(PROP_TOTAL_MUTANTS, report.getSummary().getTotal())
             .endObject();
       }
+    } catch (MutationReportRejectedException e) {
+      reject(response, projectKey, branch, e.getMessage());
     } catch (IOException e) {
       writeText(response, 400, "Bad Request: " + e.getMessage());
     }
+  }
+
+  /** The uploaded report, decompressed and within the configured size limit. */
+  private byte[] readReport(Request request) throws IOException {
+    try (InputStream is = request.paramAsInputStream(PARAM_REPORT);
+        GZIPInputStream gis = new GZIPInputStream(is)) {
+      return readLimited(gis, storage.getMaxReportSize());
+    }
+  }
+
+  /**
+   * 422 with every reason, so the CI upload step fails and its log says why; the stored report
+   * stays the last trustworthy one.
+   */
+  private static void reject(Response response, String projectKey, String branch, String reasons)
+      throws IOException {
+    writeText(
+        response,
+        422,
+        "Rejected mutation report for "
+            + projectKey
+            + " ("
+            + branch
+            + "), nothing was stored: "
+            + reasons);
   }
 
   private void handleDownload(Request request, Response response) throws Exception {

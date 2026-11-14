@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import javax.xml.parsers.DocumentBuilder;
@@ -36,6 +37,8 @@ public class MutationReportParser {
   private static final String STATUS_TIMEOUT = "TIMEOUT";
   private static final String STATUS_IGNORED = "IGNORED";
   private static final String STATUS_ERROR = "ERROR";
+  private static final String STATUS_COMPILE_ERROR = "COMPILE_ERROR";
+  private static final String STATUS_RUNTIME_ERROR = "RUNTIME_ERROR";
   private static final String STATUS_UNKNOWN = "UNKNOWN";
 
   // PIT statuses other than KILLED and TIMED_OUT that PIT's own mutation score
@@ -111,6 +114,8 @@ public class MutationReportParser {
     try {
       JsonNode root = mapper.readTree(jsonContent);
       return detectAndParse(root);
+    } catch (MutationReportRejectedException e) {
+      throw e;
     } catch (Exception e) {
       LOG.error("Failed to parse mutation report from string", e);
       throw new IOException("Failed to parse mutation report from string", e);
@@ -128,6 +133,12 @@ public class MutationReportParser {
   }
 
   private NormalizedMutationReport detectAndParse(JsonNode root) throws IOException {
+    // Already normalized format, first: it may also carry schemaVersion and files (a list, where
+    // Stryker's is an object keyed by path) or a top-level mutants list like raw mutmut. A Stryker
+    // report has neither tool nor summary.
+    if (root.has("tool") && root.has("summary")) {
+      return rebuildNormalized(mapper.treeToValue(root, NormalizedMutationReport.class));
+    }
     // Stryker format detection
     if (root.has("schemaVersion") && root.has("files")) {
       return parseStryker(root);
@@ -147,11 +158,55 @@ public class MutationReportParser {
       throw new UnsupportedOperationException(
           "Raw mutmut reports are not supported; convert them with scripts/mutmut_to_stryker.py");
     }
-    // Already normalized format
-    if (root.has("tool") && root.has("summary")) {
-      return mapper.treeToValue(root, NormalizedMutationReport.class);
-    }
     throw new IOException("Unknown mutation report format");
+  }
+
+  /**
+   * An upload in the normalized format, rebuilt from its mutants: the summary, the per-file list
+   * and every count and score come from {@link ReportAssembler}, never from the upload, so a report
+   * cannot claim numbers its mutants do not back. The mutants are the top-level list, or, when that
+   * is missing or empty, the per-file lists (each mutant taking its file's path when it has none).
+   * Without any mutants there is nothing to rebuild from, so the report is rejected.
+   */
+  private NormalizedMutationReport rebuildNormalized(NormalizedMutationReport upload)
+      throws MutationReportRejectedException {
+    List<NormalizedMutationReport.MutationMutant> mutants = mutantsOf(upload);
+    if (mutants.isEmpty()) {
+      throw new MutationReportRejectedException(
+          "the report lists no mutants: an upload in the normalized format must carry them,"
+              + " its summary is rebuilt from them");
+    }
+    NormalizedMutationReport report =
+        ReportAssembler.assemble(upload.getTool(), upload.getLanguage(), mutants);
+    report.setSchemaVersion(upload.getSchemaVersion());
+    report.setProject(Objects.requireNonNullElse(upload.getProject(), report.getProject()));
+    report.setBranch(Objects.requireNonNullElse(upload.getBranch(), report.getBranch()));
+    report.setCommit(Objects.requireNonNullElse(upload.getCommit(), report.getCommit()));
+    report.setTimestamp(Objects.requireNonNullElse(upload.getTimestamp(), report.getTimestamp()));
+    return report;
+  }
+
+  private static List<NormalizedMutationReport.MutationMutant> mutantsOf(
+      NormalizedMutationReport upload) {
+    if (upload.getMutants() != null && !upload.getMutants().isEmpty()) {
+      return upload.getMutants();
+    }
+    List<NormalizedMutationReport.MutationMutant> mutants = new ArrayList<>();
+    if (upload.getFiles() == null) {
+      return mutants;
+    }
+    for (NormalizedMutationReport.MutationFile file : upload.getFiles()) {
+      if (file.getMutants() == null) {
+        continue;
+      }
+      for (NormalizedMutationReport.MutationMutant mutant : file.getMutants()) {
+        if (mutant.getFilePath() == null) {
+          mutant.setFilePath(file.getPath());
+        }
+        mutants.add(mutant);
+      }
+    }
+    return mutants;
   }
 
   private NormalizedMutationReport parseStryker(JsonNode root) throws IOException {
@@ -247,7 +302,11 @@ public class MutationReportParser {
       case "nocoverage", "no_coverage" -> STATUS_NO_COVERAGE;
       case "timeout" -> STATUS_TIMEOUT;
       case "ignored" -> STATUS_IGNORED;
-      case "error", "compileerror", "runtimeerror" -> STATUS_ERROR;
+      // Kept apart: a CompileError is an expected verdict, a RuntimeError means the test runner
+      // crashed, which the upload guard rejects. Both stay outside the score.
+      case "compileerror" -> STATUS_COMPILE_ERROR;
+      case "runtimeerror" -> STATUS_RUNTIME_ERROR;
+      case "error" -> STATUS_ERROR;
       default -> STATUS_UNKNOWN;
     };
   }
