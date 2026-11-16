@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import HistoryChart from './components/HistoryChart';
 import {
   fetchQualityMetrics,
@@ -68,30 +68,42 @@ function tileContent(kind: TileKind, value: number | undefined): TileContent {
   return { text: formatPercent(value), rating: null, note: null };
 }
 
+interface LoadedData {
+  componentKey: string;
+  metrics: QualityMeasure[];
+  history: QualityHistoryPoint[];
+}
+
 export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey }) => {
-  const [metrics, setMetrics] = useState<QualityMeasure[]>([]);
-  const [history, setHistory] = useState<QualityHistoryPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadData = useCallback(async () => {
-    try {
-      const [metricsData, historyData] = await Promise.all([
-        fetchQualityMetrics(componentKey),
-        fetchQualityHistory(componentKey),
-      ]);
-
-      setMetrics(metricsData);
-      setHistory(historyData);
-    } catch (error) {
-      console.error('Failed to load quality data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [componentKey]);
+  // The data carries the key it was loaded for: whatever belongs to another
+  // project is never shown, not even for the render before the effect runs.
+  const [loaded, setLoaded] = useState<LoadedData | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let current = true;
+
+    Promise.all([fetchQualityMetrics(componentKey), fetchQualityHistory(componentKey)])
+      .then(([metricsData, historyData]) => {
+        if (current) {
+          setLoaded({ componentKey, metrics: metricsData, history: historyData });
+        }
+      })
+      .catch((error: Error) => {
+        if (current) {
+          console.error('Failed to load quality data:', error);
+          setLoaded({ componentKey, metrics: [], history: [] });
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [componentKey]);
+
+  const data = loaded?.componentKey === componentKey ? loaded : null;
+  const loading = data === null;
+  const metrics = data?.metrics ?? [];
+  const history = data?.history ?? [];
 
   if (loading) {
     return (
@@ -108,8 +120,19 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
   }
 
   const valueOf = (key: string) => metrics.find((metric) => metric.key === key)?.value;
-  const issues = SEVERITIES.map((severity) => ({ ...severity, count: valueOf(severity.key) ?? 0 }));
-  const mostIssues = Math.max(1, ...issues.map((severity) => severity.count));
+  // A severity SonarQube did not report is unknown, not zero: only a measure
+  // that really is 0 shows 0, and the total needs every severity.
+  const issues = SEVERITIES.map((severity) => ({ ...severity, count: valueOf(severity.key) }));
+
+  const known = issues.flatMap((severity) =>
+    severity.count === undefined ? [] : [severity.count],
+  );
+
+  const mostIssues = Math.max(1, ...known);
+
+  const totalIssues =
+    known.length === issues.length ? known.reduce((sum, count) => sum + count, 0) : null;
+
   const analyses = toChartPoints(history);
   const lastAnalysis = analyses.length > 0 ? analyses[analyses.length - 1] : null;
 
@@ -158,7 +181,7 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
             <h2 className="cq-h2">
               Open issues by severity{' '}
               <span className="cq-count">
-                {formatCount(issues.reduce((sum, severity) => sum + severity.count, 0))}
+                {totalIssues === null ? '–' : formatCount(totalIssues)}
               </span>
             </h2>
           </div>
@@ -167,12 +190,10 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
               <i className="cq-severity-dot" />
               <span>{severity.label}</span>
               <span className="cq-severity-track">
-                <i style={{ width: `${(severity.count / mostIssues) * 100}%` }} />
+                <i style={{ width: `${((severity.count ?? 0) / mostIssues) * 100}%` }} />
               </span>
-              <span
-                className={severity.count > 0 ? 'cq-severity-count' : 'cq-severity-count cq-zero'}
-              >
-                {formatCount(severity.count)}
+              <span className={severity.count ? 'cq-severity-count' : 'cq-severity-count cq-zero'}>
+                {severity.count === undefined ? '–' : formatCount(severity.count)}
               </span>
             </div>
           ))}

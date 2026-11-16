@@ -51,7 +51,7 @@ const report = {
 };
 
 const detail = () => screen.getByRole('region', { name: /^Mutants in / });
-const tab = (name: RegExp) => screen.getByRole('tab', { name });
+const tab = (name: RegExp) => screen.getByRole('button', { name });
 
 describe('MutationTesting', () => {
   beforeEach(() => {
@@ -79,7 +79,7 @@ describe('MutationTesting', () => {
       screen.getByRole('img', { name: '3 killed, 2 survived, 1 unknown' }).className,
     ).toContain('cq-bar-large');
     expect(screen.getByRole('region', { name: 'Mutants in src/checks/mutant.ts' })).toBeDefined();
-    expect(tab(/Survived/).getAttribute('aria-selected')).toBe('true');
+    expect(tab(/Survived/).getAttribute('aria-pressed')).toBe('true');
     expect(within(detail()).getByText('Regex')).toBeDefined();
     expect(within(detail()).queryByText('StringLiteral')).toBeNull();
   });
@@ -98,7 +98,7 @@ describe('MutationTesting', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /clean\.ts/ }));
     expect(screen.getByRole('region', { name: 'Mutants in src/clean.ts' })).toBeDefined();
-    expect(tab(/All/).getAttribute('aria-selected')).toBe('true');
+    expect(tab(/All/).getAttribute('aria-pressed')).toBe('true');
     expect(within(detail()).getByText('BooleanLiteral')).toBeDefined();
   });
 
@@ -176,6 +176,34 @@ describe('MutationTesting', () => {
     vi.mocked(fetchMutationReport).mockResolvedValueOnce({ files: { 'src/app.ts': [] } });
     render(<MutationTesting projectKey="raw-stryker-project" />);
     expect(await screen.findByText('This report lists no files')).toBeDefined();
+  });
+
+  it('fails with a retry, not an empty file list, when the summary loads but the download does not', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(fetchMutationReport).mockRejectedValueOnce(new Error('download 500'));
+    render(<MutationTesting projectKey="dl-project" />);
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The mutation report did not load',
+    );
+    expect(screen.queryByText('This report lists no files')).toBeNull();
+
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Mutation Testing')).toBeDefined();
+    expect(screen.getAllByRole('button', { name: /mutant\.ts/ }).length).toBeGreaterThan(0);
+  });
+
+  it('offers the status filter as a labelled group of pressable buttons, not half an ARIA tabset', async () => {
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
+    render(<MutationTesting projectKey="mutation-project" />);
+    await screen.findByText('Mutation Testing');
+
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Mutants shown' })).toBeDefined();
+    expect(tab(/Survived/).getAttribute('aria-pressed')).toBe('true');
+    expect(tab(/Killed/).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('names the branch when it has no mutation report', async () => {

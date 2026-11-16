@@ -44,11 +44,11 @@ const MutantList: React.FC<MutantListProps> = ({ mutants }) => {
         <span>Line</span>
       </div>
       <ul className="cq-list cq-scroll">
-        {mutants.slice(0, shown).map((mutant) => {
+        {mutants.slice(0, shown).map((mutant, index) => {
           const note = noteOf(mutant);
 
           return (
-            <li key={mutant.id} className="cq-mutant" title={`Mutant ${mutant.id}`}>
+            <li key={`${index}:${mutant.id}`} className="cq-mutant" title={`Mutant ${mutant.id}`}>
               <span className="cq-mutant-name">
                 <Icon
                   name={statusOf(mutant.status)}

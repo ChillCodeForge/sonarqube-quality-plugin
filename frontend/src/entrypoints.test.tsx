@@ -59,6 +59,7 @@ describe('SonarQube page extension entrypoints', () => {
     expect(mocks.injectTheme).toHaveBeenCalledOnce();
     expect(element.type).toBe(mocks.QualityDashboard);
     expect(element.props).toEqual({ componentKey: 'project:app' });
+    expect(element.key).toBe('project:app');
 
     const missingComponent = callback({ component: null });
     expect(missingComponent.props).toEqual({ componentKey: '' });

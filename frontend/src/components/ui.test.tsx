@@ -181,4 +181,19 @@ describe('FileList', () => {
 
     expect(screen.getByText('No file matches “nowhere”')).toBeDefined();
   });
+
+  it('renders mutants that share an id, as report producers may repeat one', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { container } = render(
+      <MutantList
+        mutants={[mutant, { ...mutant, mutatorName: 'Second' }, { ...mutant, id: '' }]}
+      />,
+    );
+
+    expect(container.querySelectorAll('li.cq-mutant')).toHaveLength(3);
+    expect(screen.getByText('Second')).toBeDefined();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
 });

@@ -153,18 +153,23 @@ describe('SonarQube API helpers', () => {
     await expect(fetchMutationSummary('app')).rejects.toBeNull();
   });
 
-  it('fetches mutation reports and returns null if download fails', async () => {
+  it('fetches mutation reports, treats 404 as no report and rethrows every other failure', async () => {
     vi.mocked(axios.get)
       .mockResolvedValueOnce({ data: { files: { 'src/app.ts': [] } } })
-      .mockRejectedValueOnce(new Error('offline'));
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 500 } })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(null);
 
     await expect(fetchMutationReport('app', 'feature')).resolves.toEqual({
       files: { 'src/app.ts': [] },
     });
-    await expect(fetchMutationReport('app', 'feature')).resolves.toBeNull();
     expect(axios.get).toHaveBeenCalledWith('/api/chillcode_mutation/download', {
       params: { projectKey: 'app', branch: 'feature' },
     });
+    await expect(fetchMutationReport('app')).resolves.toBeNull();
+    await expect(fetchMutationReport('app')).rejects.toEqual({ response: { status: 500 } });
+    await expect(fetchMutationReport('app')).rejects.toThrow('offline');
+    await expect(fetchMutationReport('app')).rejects.toBeNull();
   });
 });

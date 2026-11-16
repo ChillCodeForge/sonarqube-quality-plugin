@@ -14,5 +14,5 @@ window.registerExtension('chillcodequality/quality_dashboard', (options) => {
   injectTheme();
   const componentKey = options?.component?.key ?? '';
 
-  return <QualityDashboard componentKey={componentKey} />;
+  return <QualityDashboard key={componentKey} componentKey={componentKey} />;
 });

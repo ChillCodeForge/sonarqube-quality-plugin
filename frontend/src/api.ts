@@ -181,8 +181,14 @@ export async function fetchMutationReport(
 
     return response.data;
   } catch (error) {
-    console.error('Failed to fetch mutation report:', error);
+    // Same contract as the summary: 404 is "no report" (also what an
+    // unauthorized caller gets); any other failure must surface so the page
+    // can offer a retry instead of presenting an empty file list.
+    // SAFETY: an axios rejection carries the response it got; any other thrown value has no response and falls through.
+    if ((error as { response?: { status?: number } } | null)?.response?.status === 404) {
+      return null;
+    }
 
-    return null;
+    throw error;
   }
 }

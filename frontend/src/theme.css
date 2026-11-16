@@ -526,7 +526,7 @@
   color: var(--cq-text-strong);
 }
 
-.cq-root .cq-tab[aria-selected='true'] {
+.cq-root .cq-tab[aria-pressed='true'] {
   color: var(--cq-text-strong);
   font-weight: 600;
   border-bottom-color: var(--cq-accent-line);
@@ -555,6 +555,7 @@
 }
 
 .cq-root .cq-path-dir {
+  flex: 0 1000 auto;
   min-width: 0;
   color: var(--cq-text-subtle);
   overflow: hidden;
@@ -563,7 +564,11 @@
 }
 
 .cq-root .cq-path-name {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--cq-text-strong);
   font-weight: 600;
 }

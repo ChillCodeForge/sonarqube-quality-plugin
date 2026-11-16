@@ -226,14 +226,13 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
               <div className="cq-detailbar">
                 <MutantBar counts={selected.counts} />
               </div>
-              <div className="cq-tabs" role="tablist" aria-label="Mutants shown">
+              <div className="cq-tabs" role="group" aria-label="Mutants shown">
                 {tabs.map((option) => (
                   <button
                     key={option}
                     type="button"
-                    role="tab"
                     className="cq-tab"
-                    aria-selected={option === activeTab}
+                    aria-pressed={option === activeTab}
                     onClick={() => setTab(option)}
                   >
                     {option !== 'all' && <Icon name={option} status={option} />}
