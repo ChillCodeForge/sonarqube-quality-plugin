@@ -106,6 +106,7 @@ describe('MutationTesting', () => {
     vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
     render(<MutationTesting projectKey="mutation-project" />);
     await screen.findByText('Mutation Testing');
+
     const fileNames = () =>
       within(screen.getByRole('complementary', { name: 'Files' }))
         .getAllByRole('button')
@@ -198,5 +199,32 @@ describe('MutationTesting', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Mutation Testing')).toBeDefined();
     expect(fetchMutationSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a request that settles after the page was left', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let finish: (value: typeof completeSummary) => void = () => undefined;
+    let fail: (reason: Error) => void = () => undefined;
+    vi.mocked(fetchMutationSummary).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const left = render(<MutationTesting projectKey="left-project" />);
+    left.unmount();
+    finish(completeSummary);
+
+    vi.mocked(fetchMutationSummary).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+    );
+    const failed = render(<MutationTesting projectKey="failed-project" />);
+    failed.unmount();
+    fail(new Error('late'));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMutationSummary).toHaveBeenCalledTimes(2);
+    expect(error).not.toHaveBeenCalled();
   });
 });

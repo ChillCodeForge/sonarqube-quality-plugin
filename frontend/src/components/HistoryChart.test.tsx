@@ -3,14 +3,24 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryChart from './HistoryChart';
 
-const chart = vi.hoisted(() => ({
-  data: null as unknown,
-  lines: [] as { dataKey: string; strokeDasharray?: string }[],
-  yDomain: null as unknown,
+interface ChartProbe {
+  data: readonly object[] | null;
+  lines: { dataKey: string; strokeDasharray?: string }[];
+  yDomain: readonly (number | string)[] | null;
+  dayTick: string;
+  valueTick: string;
+  tooltipLabel: string;
+  tooltipItem: readonly string[] | null;
+}
+
+const chart = vi.hoisted((): ChartProbe => ({
+  data: null,
+  lines: [],
+  yDomain: null,
   dayTick: '',
   valueTick: '',
   tooltipLabel: '',
-  tooltipItem: null as unknown,
+  tooltipItem: null,
 }));
 
 vi.mock('recharts', () => {
@@ -19,7 +29,7 @@ vi.mock('recharts', () => {
   return {
     CartesianGrid: () => null,
     ResponsiveContainer: withChildren,
-    LineChart: ({ data, children }: { data: unknown; children?: React.ReactNode }) => {
+    LineChart: ({ data, children }: { data: readonly object[]; children?: React.ReactNode }) => {
       chart.data = data;
 
       return children;
@@ -34,7 +44,10 @@ vi.mock('recharts', () => {
 
       return null;
     },
-    YAxis: (props: { domain: unknown; tickFormatter: (value: number) => string }) => {
+    YAxis: (props: {
+      domain: readonly (number | string)[];
+      tickFormatter: (value: number) => string;
+    }) => {
       chart.yDomain = props.domain;
       chart.valueTick = props.tickFormatter(90);
 

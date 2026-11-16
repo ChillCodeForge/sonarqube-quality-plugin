@@ -10,13 +10,7 @@ import { injectTheme } from './theme';
 //   has Scope.COMPONENT); options.el / options.currentUser also available.
 // SonarQube's own React runtime mounts the returned element - no manual
 // ReactDOM/createRoot call needed here.
-declare global {
-  interface Window {
-    registerExtension: (key: string, callback: (options: any) => React.ReactElement) => void;
-  }
-}
-
-window.registerExtension('chillcodequality/quality_dashboard', (options: any) => {
+window.registerExtension('chillcodequality/quality_dashboard', (options) => {
   injectTheme();
   const componentKey = options?.component?.key ?? '';
 

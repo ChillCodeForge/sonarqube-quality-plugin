@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import HistoryChart from './components/HistoryChart';
 import {
   fetchQualityMetrics,
@@ -73,11 +73,7 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
   const [history, setHistory] = useState<QualityHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, [componentKey]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [metricsData, historyData] = await Promise.all([
         fetchQualityMetrics(componentKey),
@@ -91,7 +87,11 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
     } finally {
       setLoading(false);
     }
-  };
+  }, [componentKey]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   if (loading) {
     return (

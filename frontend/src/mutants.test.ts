@@ -85,6 +85,7 @@ describe('toFileView', () => {
       ...mutant(id, 'SURVIVED'),
       location: { start: { line, column } },
     });
+
     const view = toFileView({
       path: 'a.ts',
       mutants: [at('c', 63, 22), mutant('nowhere', 'SURVIVED'), at('b', 63, 7), at('a', 19, 43)],
@@ -112,6 +113,7 @@ describe('file lists', () => {
     toFileView({ path: 'a.ts', metrics: { score: 90, total: 20, survived: 1, killed: 19 } }),
     toFileView({ path: 'src/C.ts', metrics: { total: 3, survived: 3 } }),
   ];
+
   const paths = (sorted: typeof files) => sorted.map((file) => file.path);
 
   it('sorts by survivors, score, mutant count and path without touching the input', () => {

@@ -40,7 +40,12 @@ function formatMoment(time: number): string {
 
 const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
   const points = toChartPoints(history);
-  const series = SERIES.filter((entry) => latestValue(points, entry.key) !== null);
+
+  const series = SERIES.flatMap((entry) => {
+    const latest = latestValue(points, entry.key);
+
+    return latest === null ? [] : [{ ...entry, latest }];
+  });
 
   if (series.length === 0) {
     return (
@@ -58,8 +63,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
             <svg viewBox="0 0 22 4" aria-hidden="true">
               <path d="M0 2h22" stroke={entry.color} strokeDasharray={entry.dash} />
             </svg>
-            {/* SAFETY: series keeps only the entries latestValue found a value for. */}
-            {`${entry.label} ${formatPercent(latestValue(points, entry.key) as number)}`}
+            {`${entry.label} ${formatPercent(entry.latest)}`}
           </li>
         ))}
       </ul>

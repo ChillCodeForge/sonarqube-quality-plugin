@@ -4,7 +4,7 @@ import Icon from './components/Icon';
 import MutantBar from './components/MutantBar';
 import MutantList from './components/MutantList';
 import RatingBadge from './components/RatingBadge';
-import { fetchMutationReport, fetchMutationSummary } from './api';
+import { fetchMutationReport, fetchMutationSummary, type MutationSummary } from './api';
 import {
   STATUS_LABELS,
   STATUS_ORDER,
@@ -23,18 +23,6 @@ import {
   type MutationFile,
   type StatusKey,
 } from './mutants';
-
-interface MutationSummary {
-  score: number;
-  total: number;
-  killed: number;
-  survived: number;
-  noCoverage: number;
-  timeout: number;
-  ignored: number;
-  tool: string;
-  language: string;
-}
 
 interface MutationTestingProps {
   projectKey: string;
@@ -73,27 +61,39 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
   const [sort, setSort] = useState<FileSort>('survivors');
   const [tab, setTab] = useState<Tab | null>(null);
 
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    loadData();
-  }, [projectKey, branch]);
+    let current = true;
 
-  const loadData = async () => {
+    Promise.all([fetchMutationSummary(projectKey, branch), fetchMutationReport(projectKey, branch)])
+      .then(([summaryData, reportData]) => {
+        if (!current) {
+          return;
+        }
+
+        setSummary(summaryData);
+        setFiles(Array.isArray(reportData?.files) ? reportData.files : []);
+        setReportedOn(reportDate(reportData?.timestamp));
+        setPhase('ready');
+      })
+      .catch((error: Error) => {
+        if (!current) {
+          return;
+        }
+
+        console.error('Failed to load mutation data:', error);
+        setPhase('failed');
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [projectKey, branch, attempt]);
+
+  const retry = () => {
     setPhase('loading');
-
-    try {
-      const [summaryData, reportData] = await Promise.all([
-        fetchMutationSummary(projectKey, branch),
-        fetchMutationReport(projectKey, branch),
-      ]);
-
-      setSummary(summaryData);
-      setFiles(Array.isArray(reportData?.files) ? reportData.files : []);
-      setReportedOn(reportDate(reportData?.timestamp));
-      setPhase('ready');
-    } catch (error) {
-      console.error('Failed to load mutation data:', error);
-      setPhase('failed');
-    }
+    setAttempt((count) => count + 1);
   };
 
   const views = useMemo(() => files.map(toFileView), [files]);
@@ -121,7 +121,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
             <Icon name="alert" />
             <h1 className="cq-h2">The mutation report did not load</h1>
             <p>SonarQube did not answer the request for {branch}.</p>
-            <button type="button" className="cq-button" onClick={loadData}>
+            <button type="button" className="cq-button" onClick={retry}>
               <Icon name="retry" />
               Try again
             </button>
@@ -152,6 +152,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
   const selected = visible.find((file) => file.path === selectedPath) ?? visible[0] ?? null;
   const tabs = selected ? tabsOf(selected) : [];
   const activeTab = selected && tab && tabs.includes(tab) ? tab : selected && defaultTab(selected);
+
   const shownMutants =
     selected?.mutants.filter(
       (mutant) => activeTab === 'all' || statusOf(mutant.status) === activeTab,

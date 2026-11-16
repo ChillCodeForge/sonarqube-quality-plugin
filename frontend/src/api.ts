@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { MutationFile } from './mutants';
 
 const API_BASE = '/api';
 
@@ -11,6 +12,27 @@ export type QualityHistoryPoint = {
 export type QualityMeasure = {
   key: string;
   value: number;
+};
+
+export type MutationSummary = {
+  score: number;
+  total: number;
+  killed: number;
+  survived: number;
+  noCoverage: number;
+  timeout: number;
+  ignored: number;
+  tool: string;
+  language: string;
+};
+
+// The stored report as the backend serializes it. The timestamp is
+// [year, month, day, ...] or, from other producers, an ISO string.
+export type MutationReport = {
+  timestamp?: number[] | string | null;
+  // A report that is not in the normalized layout (e.g. raw Stryker output
+  // keyed by path) arrives as an object and is shown as having no files.
+  files?: MutationFile[] | Record<string, readonly unknown[]>;
 };
 
 type SonarMeasure = {
@@ -50,10 +72,12 @@ export async function fetchQualityMetrics(componentKey: string): Promise<Quality
     // no numeric value is left out and shows as missing.
     const measures: SonarMeasure[] = response.data.component?.measures || [];
 
-    return measures
-      .filter((measure) => measure.value != null && measure.value !== '')
-      .map((measure) => ({ key: measure.metric, value: Number(measure.value) }))
-      .filter((measure) => Number.isFinite(measure.value));
+    return measures.flatMap((measure) => {
+      const value =
+        measure.value == null || measure.value === '' ? Number.NaN : Number(measure.value);
+
+      return Number.isFinite(value) ? [{ key: measure.metric, value }] : [];
+    });
   } catch (error) {
     console.error('Failed to fetch quality metrics:', error);
 
@@ -105,7 +129,7 @@ export async function fetchQualityHistory(componentKey: string): Promise<Quality
 export async function fetchMutationSummary(
   projectKey: string,
   branch: string = 'main',
-): Promise<any> {
+): Promise<MutationSummary | null> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
       params: { projectKey, branch },
@@ -149,7 +173,7 @@ export async function fetchMutationSummary(
 export async function fetchMutationReport(
   projectKey: string,
   branch: string = 'main',
-): Promise<any> {
+): Promise<MutationReport | null> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/download`, {
       params: { projectKey, branch },

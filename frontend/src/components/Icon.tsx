@@ -7,7 +7,7 @@ const CIRCLE = <circle cx="8" cy="8" r="6.25" />;
 
 // One 16px outline set, drawn at a 1.5px stroke so every icon reads at the
 // same weight as SonarQube's own.
-const SHAPES: Record<IconName, React.ReactNode> = {
+const GLYPHS: Record<IconName, React.ReactNode> = {
   killed: (
     <>
       {CIRCLE}
@@ -85,7 +85,7 @@ const Icon: React.FC<IconProps> = ({ name, status, title }) => (
     aria-hidden={title ? undefined : true}
   >
     {title && <title>{title}</title>}
-    {SHAPES[name]}
+    {GLYPHS[name]}
   </svg>
 );
 

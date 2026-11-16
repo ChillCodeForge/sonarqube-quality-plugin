@@ -8,6 +8,7 @@ interface MutantBarProps {
 
 const MutantBar: React.FC<MutantBarProps> = ({ counts, size = 'medium' }) => {
   const shown = STATUS_ORDER.filter((status) => counts[status] > 0);
+
   const label = shown
     .map((status) => `${formatCount(counts[status])} ${STATUS_LABELS[status].toLowerCase()}`)
     .join(', ');

@@ -189,18 +189,22 @@ export function filterFiles(files: FileView[], filter: string): FileView[] {
 
 // The stored report carries its timestamp as [year, month, day, ...] (how the
 // backend serializes it) or, from other producers, as an ISO string.
-export function reportDate(timestamp: unknown): Date | null {
-  if (Array.isArray(timestamp) && timestamp.length >= 3) {
-    return new Date(Number(timestamp[0]), Number(timestamp[1]) - 1, Number(timestamp[2]));
+export type ReportTimestamp = number[] | string | null | undefined;
+
+export function reportDate(timestamp: ReportTimestamp): Date | null {
+  if (!timestamp) {
+    return null;
   }
 
-  if (typeof timestamp === 'string') {
-    const date = new Date(timestamp);
-
-    return Number.isNaN(date.getTime()) ? null : date;
+  if (Array.isArray(timestamp)) {
+    return timestamp.length >= 3
+      ? new Date(Number(timestamp[0]), Number(timestamp[1]) - 1, Number(timestamp[2]))
+      : null;
   }
 
-  return null;
+  const date = new Date(timestamp);
+
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function plural(count: number, noun: string): string {

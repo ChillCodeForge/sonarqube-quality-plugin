@@ -16,12 +16,13 @@ export function parseSonarDate(date: string): number {
 
 export function toChartPoints(history: QualityHistoryPoint[]): ChartPoint[] {
   return history
-    .map((point) => ({
-      time: parseSonarDate(point.date),
-      coverage: point.coverage,
-      mutation_score: point.mutation_score,
-    }))
-    .filter((point) => Number.isFinite(point.time))
+    .flatMap((point) => {
+      const time = parseSonarDate(point.date);
+
+      return Number.isFinite(time)
+        ? [{ time, coverage: point.coverage, mutation_score: point.mutation_score }]
+        : [];
+    })
     .sort((a, b) => a.time - b.time);
 }
 
