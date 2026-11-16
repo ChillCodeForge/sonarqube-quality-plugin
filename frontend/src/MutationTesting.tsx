@@ -226,7 +226,8 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
               <div className="cq-detailbar">
                 <MutantBar counts={selected.counts} />
               </div>
-              <div className="cq-tabs" role="group" aria-label="Mutants shown">
+              <fieldset className="cq-tabs">
+                <legend className="cq-sr-only">Mutants shown</legend>
                 {tabs.map((option) => (
                   <button
                     key={option}
@@ -242,7 +243,7 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
                     </span>
                   </button>
                 ))}
-              </div>
+              </fieldset>
               <MutantList key={`${selected.path}:${activeTab}`} mutants={shownMutants} />
             </section>
           )}
