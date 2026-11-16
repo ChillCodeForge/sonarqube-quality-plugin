@@ -94,7 +94,7 @@ describe('QualityDashboard', () => {
     ]);
 
     expect(screen.getByText('Open issues by severity').textContent).toBe(
-      'Open issues by severity4',
+      'Open issues by severity 4',
     );
     expect(issueCount('Blocker')?.textContent).toBe('1');
     expect(issueCount('Major')?.className).toBe('cq-severity-count');

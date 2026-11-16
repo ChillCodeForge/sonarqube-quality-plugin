@@ -156,7 +156,7 @@ export const QualityDashboard: React.FC<QualityDashboardProps> = ({ componentKey
         <section className="cq-card">
           <div className="cq-cardhead">
             <h2 className="cq-h2">
-              Open issues by severity
+              Open issues by severity{' '}
               <span className="cq-count">
                 {formatCount(issues.reduce((sum, severity) => sum + severity.count, 0))}
               </span>

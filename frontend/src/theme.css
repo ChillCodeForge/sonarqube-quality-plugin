@@ -321,6 +321,11 @@
   stroke-linejoin: round;
 }
 
+.cq-root .cq-icon-label {
+  display: inline-flex;
+  flex: none;
+}
+
 .cq-root .cq-icon[data-status] {
   color: var(--cq-status);
 }

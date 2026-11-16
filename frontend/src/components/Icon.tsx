@@ -75,18 +75,22 @@ interface IconProps {
   title?: string;
 }
 
-const Icon: React.FC<IconProps> = ({ name, status, title }) => (
-  <svg
-    className="cq-icon"
-    data-status={status}
-    viewBox="0 0 16 16"
-    role={title ? 'img' : undefined}
-    aria-label={title}
-    aria-hidden={title ? undefined : true}
-  >
-    {title && <title>{title}</title>}
-    {GLYPHS[name]}
-  </svg>
-);
+// A titled icon carries the label on a wrapper, since the img role belongs
+// on an element a screen reader treats as one image; the svg stays hidden.
+const Icon: React.FC<IconProps> = ({ name, status, title }) => {
+  const glyph = (
+    <svg className="cq-icon" data-status={status} viewBox="0 0 16 16" aria-hidden="true">
+      {GLYPHS[name]}
+    </svg>
+  );
+
+  return title ? (
+    <span className="cq-icon-label" role="img" aria-label={title}>
+      {glyph}
+    </span>
+  ) : (
+    glyph
+  );
+};
 
 export default Icon;

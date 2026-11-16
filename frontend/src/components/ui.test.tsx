@@ -26,9 +26,12 @@ describe('Icon', () => {
     expect(container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
 
     rerender(<Icon name="survived" status="survived" title="Survived" />);
-    expect(screen.getByRole('img', { name: 'Survived' }).getAttribute('data-status')).toBe(
-      'survived',
-    );
+    expect(
+      screen
+        .getByRole('img', { name: 'Survived' })
+        .querySelector('svg')
+        ?.getAttribute('data-status'),
+    ).toBe('survived');
   });
 });
 
