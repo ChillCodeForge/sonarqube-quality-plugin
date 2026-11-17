@@ -1,11 +1,43 @@
 import axios from 'axios';
+import type { MutationFile } from './mutants';
 
 const API_BASE = '/api';
 
-type QualityHistoryPoint = {
+export type QualityHistoryPoint = {
   date: string;
   coverage?: number;
   mutation_score?: number;
+};
+
+export type QualityMeasure = {
+  key: string;
+  value: number;
+};
+
+export type MutationSummary = {
+  score: number;
+  total: number;
+  killed: number;
+  survived: number;
+  noCoverage: number;
+  timeout: number;
+  ignored: number;
+  tool: string;
+  language: string;
+};
+
+// The stored report as the backend serializes it. The timestamp is
+// [year, month, day, ...] or, from other producers, an ISO string.
+export type MutationReport = {
+  timestamp?: number[] | string | null;
+  // A report that is not in the normalized layout (e.g. raw Stryker output
+  // keyed by path) arrives as an object and is shown as having no files.
+  files?: MutationFile[] | Record<string, readonly unknown[]>;
+};
+
+type SonarMeasure = {
+  metric: string;
+  value?: string | number | null;
 };
 
 type SonarHistoryMeasure = {
@@ -13,7 +45,7 @@ type SonarHistoryMeasure = {
   history?: Array<{ date: string; value?: string | number | null }>;
 };
 
-export async function fetchQualityMetrics(componentKey: string): Promise<any[]> {
+export async function fetchQualityMetrics(componentKey: string): Promise<QualityMeasure[]> {
   try {
     const response = await axios.get(`${API_BASE}/measures/component`, {
       params: {
@@ -34,7 +66,18 @@ export async function fetchQualityMetrics(componentKey: string): Promise<any[]> 
       },
     });
 
-    return response.data.component?.measures || [];
+    // SonarQube answers { metric, value } with every value a string ("89.1",
+    // and "1.0" to "5.0" for a rating). The dashboard looks measures up by key
+    // and does arithmetic on them, so both are normalized here; a measure with
+    // no numeric value is left out and shows as missing.
+    const measures: SonarMeasure[] = response.data.component?.measures || [];
+
+    return measures.flatMap((measure) => {
+      const value =
+        measure.value == null || measure.value === '' ? Number.NaN : Number(measure.value);
+
+      return Number.isFinite(value) ? [{ key: measure.metric, value }] : [];
+    });
   } catch (error) {
     console.error('Failed to fetch quality metrics:', error);
 
@@ -86,7 +129,7 @@ export async function fetchQualityHistory(componentKey: string): Promise<Quality
 export async function fetchMutationSummary(
   projectKey: string,
   branch: string = 'main',
-): Promise<any> {
+): Promise<MutationSummary | null> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/summary`, {
       params: { projectKey, branch },
@@ -114,16 +157,23 @@ export async function fetchMutationSummary(
       language: data.language,
     };
   } catch (error) {
-    console.error('Failed to fetch mutation summary:', error);
+    // The backend answers 404 for a project the caller may not browse, on
+    // purpose the same as a project with no report. Anything else (a network
+    // failure, a 5xx) is a failed request, and the page says so instead of
+    // claiming there is no report.
+    // SAFETY: an axios rejection carries the response it got; any other thrown value has no response and falls through.
+    if ((error as { response?: { status?: number } } | null)?.response?.status === 404) {
+      return null;
+    }
 
-    return null;
+    throw error;
   }
 }
 
 export async function fetchMutationReport(
   projectKey: string,
   branch: string = 'main',
-): Promise<any> {
+): Promise<MutationReport | null> {
   try {
     const response = await axios.get(`${API_BASE}/chillcode_mutation/download`, {
       params: { projectKey, branch },
@@ -131,8 +181,14 @@ export async function fetchMutationReport(
 
     return response.data;
   } catch (error) {
-    console.error('Failed to fetch mutation report:', error);
+    // Same contract as the summary: 404 is "no report" (also what an
+    // unauthorized caller gets); any other failure must surface so the page
+    // can offer a retry instead of presenting an empty file list.
+    // SAFETY: an axios rejection carries the response it got; any other thrown value has no response and falls through.
+    if ((error as { response?: { status?: number } } | null)?.response?.status === 404) {
+      return null;
+    }
 
-    return null;
+    throw error;
   }
 }
