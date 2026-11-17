@@ -234,10 +234,17 @@ const MutationTesting: React.FC<MutationTestingProps> = ({ projectKey, branch = 
                     type="button"
                     className="cq-tab"
                     aria-pressed={option === activeTab}
+                    title={option === 'all' ? undefined : STATUS_LABELS[option]}
                     onClick={() => setTab(option)}
                   >
-                    {option !== 'all' && <Icon name={option} status={option} />}
-                    {option === 'all' ? 'All' : STATUS_LABELS[option]}
+                    {option === 'all' ? (
+                      'All'
+                    ) : (
+                      <>
+                        <Icon name={option} status={option} />
+                        <span className="cq-tab-label">{STATUS_LABELS[option]}</span>
+                      </>
+                    )}
                     <span className="cq-count">
                       {formatCount(option === 'all' ? selected.total : selected.counts[option])}
                     </span>

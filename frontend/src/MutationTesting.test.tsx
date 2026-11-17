@@ -84,6 +84,16 @@ describe('MutationTesting', () => {
     expect(within(detail()).queryByText('StringLiteral')).toBeNull();
   });
 
+  it('names each status tab in its tooltip, since a narrow page shows only the icon', async () => {
+    vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
+    render(<MutationTesting projectKey="mutation-project" />);
+    await screen.findByText('Mutation Testing');
+
+    expect(tab(/Survived/).title).toBe('Survived');
+    expect(tab(/Survived/).querySelector('.cq-tab-label')?.textContent).toBe('Survived');
+    expect(tab(/^All/).hasAttribute('title')).toBe(false);
+  });
+
   it('switches the status shown, then the file, and starts the new file on its own default', async () => {
     vi.mocked(fetchMutationReport).mockResolvedValueOnce(report);
     render(<MutationTesting projectKey="mutation-project" />);

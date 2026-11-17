@@ -987,6 +987,20 @@
 }
 
 @container (max-width: 640px) {
+  .cq-root .cq-tab {
+    gap: 4px;
+    padding: 0 6px;
+  }
+
+  .cq-root .cq-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .cq-root .cq-mutant {
     grid-template-columns: minmax(0, 1fr) auto;
   }
