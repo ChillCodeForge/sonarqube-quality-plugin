@@ -672,4 +672,117 @@ class MutationWebServiceTest {
     assertEquals("main", stored.getValue().getBranch());
     assertTrue(response.body().contains("\"branch\":\"main\""));
   }
+
+  @Test
+  void rejectsAMassTimeoutReportWithAnExplanationAndStoresNothing() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+    org.mockito.Mockito.when(storage.getMaxReportSize()).thenReturn(10L * 1024 * 1024);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer secret-token"));
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey"))
+        .thenReturn("development-standards");
+    byte[] report =
+        ch.chillcode.sonar.quality.mutation.StoredReports.stryker("development-standards");
+    java.io.ByteArrayOutputStream gzipped = new java.io.ByteArrayOutputStream();
+    try (java.util.zip.GZIPOutputStream gos = new java.util.zip.GZIPOutputStream(gzipped)) {
+      gos.write(report);
+    }
+    org.mockito.Mockito.when(request.paramAsInputStream("report"))
+        .thenReturn(new ByteArrayInputStream(gzipped.toByteArray()));
+
+    RecordingResponse response = new RecordingResponse();
+    action(service, "upload").handler().handle(request, response);
+
+    assertEquals(422, response.status());
+    assertEquals("text/plain", response.mediaType());
+    assertEquals(
+        "Rejected mutation report for development-standards (main), nothing was stored:"
+            + " 6733 timed out and 0 ended in RuntimeError, 88.5 % of the 7606 scored mutants"
+            + " (limit 10 % together): a share this high means the test runner overran its"
+            + " timeouts or crashed, not that the tests decided the mutants",
+        response.body());
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.never())
+        .storeReport(org.mockito.ArgumentMatchers.any());
+  }
+
+  private static RecordingResponse upload(MutationReportStorageService storage, String report)
+      throws Exception {
+    org.mockito.Mockito.when(storage.getMaxReportSize()).thenReturn(10L * 1024 * 1024);
+    MutationWebService service =
+        new MutationWebService(new MutationReportParser(), storage, "secret-token");
+    Request request = org.mockito.Mockito.mock(Request.class);
+    org.mockito.Mockito.when(request.header("Authorization"))
+        .thenReturn(java.util.Optional.of("Bearer secret-token"));
+    org.mockito.Mockito.when(request.mandatoryParam("projectKey")).thenReturn("proj1");
+    java.io.ByteArrayOutputStream gzipped = new java.io.ByteArrayOutputStream();
+    try (java.util.zip.GZIPOutputStream gos = new java.util.zip.GZIPOutputStream(gzipped)) {
+      gos.write(report.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    org.mockito.Mockito.when(request.paramAsInputStream("report"))
+        .thenReturn(new ByteArrayInputStream(gzipped.toByteArray()));
+    RecordingResponse response = new RecordingResponse();
+    action(service, "upload").handler().handle(request, response);
+    return response;
+  }
+
+  @Test
+  void storesTheSummaryRebuiltFromTheMutantsOfANormalizedUpload() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+
+    RecordingResponse response =
+        upload(
+            storage,
+            "{\"tool\":\"stryker\",\"summary\":{\"timeout\":50,\"score\":100},\"files\":"
+                + "[{\"path\":\"a.ts\",\"mutants\":[{\"status\":\"SURVIVED\"}]}]}");
+
+    org.mockito.ArgumentCaptor<NormalizedMutationReport> stored =
+        org.mockito.ArgumentCaptor.forClass(NormalizedMutationReport.class);
+    org.mockito.Mockito.verify(storage).storeReport(stored.capture());
+    assertEquals(0, stored.getValue().getSummary().getTimeout());
+    assertEquals(0.0, stored.getValue().getSummary().getScore(), 0.001);
+    assertTrue(response.body().contains("\"mutationScore\":0.0"), response.body());
+  }
+
+  @Test
+  void rejectsASummaryOnlyNormalizedUploadAndStoresNothing() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+
+    RecordingResponse response =
+        upload(
+            storage,
+            "{\"tool\":\"stryker\",\"summary\":{\"total\":7606,\"timeout\":6733,\"score\":91.9}}");
+
+    assertEquals(422, response.status());
+    assertEquals("text/plain", response.mediaType());
+    assertEquals(
+        "Rejected mutation report for proj1 (main), nothing was stored: the report lists no"
+            + " mutants: an upload in the normalized format must carry them, its summary is"
+            + " rebuilt from them",
+        response.body());
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.never())
+        .storeReport(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void rejectsAMutantWithoutStatusAsUnprocessableNotAsAServerError() throws Exception {
+    MutationReportStorageService storage =
+        org.mockito.Mockito.mock(MutationReportStorageService.class);
+
+    RecordingResponse response =
+        upload(
+            storage, "{\"tool\":\"stryker\",\"summary\":{},\"mutants\":[{\"filePath\":\"a.ts\"}]}");
+
+    assertEquals(422, response.status());
+    assertTrue(
+        response.body().contains("status outside the documented list (missing 1)"),
+        response.body());
+    org.mockito.Mockito.verify(storage, org.mockito.Mockito.never())
+        .storeReport(org.mockito.ArgumentMatchers.any());
+  }
 }
