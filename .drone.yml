@@ -57,6 +57,14 @@ steps:
       - mkdir -p /shared/src/.chillcode-standards && cp -a .chillcode-standards/. /shared/src/.chillcode-standards/
       - cp .chillcode-standards/java/maven/settings.xml /shared/maven-settings.xml
     depends_on: [prep-install-frontend, prep-install-backend, prep-development-standards]
+  # Verifies the pinned security-v1 bundle and renders the .quality.yaml waivers
+  # into /shared/src/.chillcode-security/trivyignore.yaml for the OSV PR gate.
+  - name: prep-security-baseline
+    image: registry.chillcode.de/dockerhub-cache/library/alpine:3.21
+    volumes: [{name: shared, path: /shared}]
+    commands:
+      - cd /shared/src && sh ci/fetch-security-baseline.sh
+    depends_on: [prep-sync]
 trigger:
   branch: [main]
   event: [push, pull_request]
