@@ -5,7 +5,7 @@ contract:
 
 security:
   baseline: security-v1
-  artifactVersion: '1.2.1'
+  artifactVersion: '1.2.2'
 
 languages:
   node: true
@@ -42,3 +42,19 @@ megalinter:
 
 standards:
   ref: standards-v1.3.2
+
+# SEC-* entries are rendered by render-waivers.sh (prep-security-baseline) into
+# .chillcode-security/trivyignore.yaml, which the OSV PR gate reads.
+waivers:
+  - policy: SEC-VULN-001
+    owner: Marcell
+    reason: >-
+      picomatch is a dev-only toolchain dependency (vite, vitest, fdir,
+      tinyglobby; dev true in frontend/package-lock.json) and is never shipped.
+      OSV marks every version through 4.0.7 as affected and 4.0.7 is the newest
+      release, so no fixed version exists to bump to. The ReDoS needs
+      attacker-controlled glob patterns; this repository only evaluates its own
+      committed patterns.
+    ticket: ChillCode/sonarqube-quality-plugin#77
+    expires: 2026-12-17
+    scope: CVE-2026-112366@frontend/package-lock.json
