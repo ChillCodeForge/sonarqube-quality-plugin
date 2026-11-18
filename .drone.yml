@@ -299,7 +299,7 @@ steps:
           echo "Sonar PR base: refs/heads/$${DRONE_TARGET_BRANCH} reset to refs/remotes/origin/$${DRONE_TARGET_BRANCH}"
           PR_ARGS="-Dsonar.pullrequest.key=$${DRONE_PULL_REQUEST} -Dsonar.pullrequest.branch=$${DRONE_SOURCE_BRANCH} -Dsonar.pullrequest.base=$${DRONE_TARGET_BRANCH}"
         fi
-        sonar-scanner \
+        timeout -k 30 900 sonar-scanner \
           $${PR_ARGS} \
           -Dsonar.host.url="$${SONAR_HOST_URL}" \
           -Dsonar.projectKey=sonarqube-quality-plugin \
@@ -315,7 +315,8 @@ steps:
           -Dsonar.exclusions='frontend/node_modules/**,backend/target/**,frontend/dist/**,scripts/tests/**,frontend/src/**/*.test.ts,frontend/src/**/*.test.tsx,frontend/src/**/*.spec.ts,frontend/src/**/*.spec.tsx,.cache/**,.chillcode-standards/**,.chillcode-quality-reports/**' \
           -Dsonar.working.directory=/tmp/sonar-scanner-work \
           -Dsonar.qualitygate.wait=true \
-          -Dsonar.scm.revision="${DRONE_COMMIT_SHA}"
+          -Dsonar.qualitygate.timeout=300 \
+          -Dsonar.scm.revision="${DRONE_COMMIT_SHA}" || { status=$$?; [ "$$status" -ne 124 ] || echo "Error: Sonar analysis exceeded 900 s; SonarQube is unreachable or hung." >&2; exit "$$status"; }
   # Adds the Sonar result to the existing ChillCode Quality Report PR comment
   # (one summary comment; reviewdog keeps the inline comments). Also on a red gate.
   - name: report-sonarqube-gitea-comment
